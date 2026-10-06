@@ -1,12 +1,12 @@
 import Link from 'next/link';
-import { getMonthly, getExpenses, getProducts, getCortes, getSales, getGoal } from '@/lib/data';
-import { createExpense, deleteExpense, setGoal } from '@/app/actions';
+import { getMonthly, getExpenses, getProducts, getCortes, getSales, getGoal, getRetiro } from '@/lib/data';
+import { createExpense, deleteExpense, setGoal, setRetiro } from '@/app/actions';
 import Submit from '@/components/Submit';
 import ConfirmButton from '@/components/ConfirmButton';
 import StackBar from '@/components/StackBar';
 import { Gauge, Legend, Delta } from '@/components/Viz';
 import { corteTitle, dias, plural } from '@/components/Corte';
-import { mxn, mes, mesCorto, mesAnterior, mesDe, fecha, today, thisMonth, pct } from '@/lib/format';
+import { mxn, mes, mesCorto, mesAnterior, mesDe, mesesEntre, INICIO, fecha, today, thisMonth, pct } from '@/lib/format';
 
 export const metadata = { title: 'Finanzas · Vantacard' };
 
@@ -22,8 +22,8 @@ const sumBy = (list, f) => list.reduce((a, x) => a + f(x), 0);
 
 export default async function Finanzas({ searchParams }) {
   const { mes: mesParam } = await searchParams;
-  const [monthly, expenses, products, cortes, sales, goal] = await Promise.all([
-    getMonthly(), getExpenses(), getProducts({ includeInactive: true }), getCortes(), getSales({ limit: 100000 }), getGoal(),
+  const [monthly, expenses, products, cortes, sales, goal, retiro] = await Promise.all([
+    getMonthly(), getExpenses(), getProducts({ includeInactive: true }), getCortes(), getSales({ limit: 100000 }), getGoal(), getRetiro(),
   ]);
 
   // Periodo: un mes (por defecto el actual) o todo. Todo lo de abajo se filtra con él.
@@ -32,6 +32,12 @@ export default async function Finanzas({ searchParams }) {
   const period = mesParam === 'todo' ? null : months.includes(mesParam) ? mesParam : current;
   const inPeriod = (date) => !period || mesDe(date) === period;
   const isCurrent = period === current;
+
+  // Fondo euros: cada mes desde INICIO se retira lo que vale Claude. No es gasto del negocio,
+  // pero sale del dinero del negocio: cuenta en el flujo y en el punto de equilibrio.
+  const fundMonthsTotal = mesesEntre(INICIO, current);
+  const fundTotal = retiro * fundMonthsTotal;
+  const fund = period ? (period >= INICIO && period <= current ? retiro : 0) : fundTotal;
 
   const t = monthly.filter((r) => inPeriod(r.month)).reduce(addMonth, ZERO);
   const all = monthly.reduce(addMonth, ZERO);
@@ -49,7 +55,7 @@ export default async function Finanzas({ searchParams }) {
 
   // Punto de equilibrio: lo que necesitas vender para recuperar tus gastos y lo que invertiste
   // en mercancía en el periodo. Las piezas que faltan se calculan a tu precio promedio por pieza.
-  const breakEven = t.expenses + t.spend;
+  const breakEven = t.expenses + t.spend + fund;
   const pricePerPiece = t.units > 0 ? t.revenue / t.units : all.units > 0 ? all.revenue / all.units : 0;
   const shortfall = Math.max(breakEven - t.revenue, 0);
   const piecesNeeded = shortfall > 0 && pricePerPiece > 0 ? Math.ceil(shortfall / pricePerPiece) : 0;
@@ -111,8 +117,9 @@ export default async function Finanzas({ searchParams }) {
   );
 
   const monthMax = Math.max(...monthly.map((r) => Math.max(r.revenue, r.cogs + r.expenses)), 0);
-  const flowMax = Math.max(t.revenue, t.spend + t.expenses);
-  const flowNet = t.revenue - t.spend - t.expenses;
+  const flowOut = t.spend + t.expenses + fund;
+  const flowMax = Math.max(t.revenue, flowOut);
+  const flowNet = t.revenue - flowOut;
   const breakdown = [
     { label: 'Costo de lo vendido', value: t.cogs, tone: 'cost' },
     { label: 'Gastos', value: t.expenses, tone: 'exp' },
@@ -208,7 +215,7 @@ export default async function Finanzas({ searchParams }) {
                     Te faltan <strong>{mxn(shortfall)}</strong> en ventas{piecesNeeded > 0 ? ` (unas ${plural(piecesNeeded, 'pieza')} a tu precio promedio)` : ''} para recuperar lo que gastaste e invertiste.
                   </p>
                 )}
-                <p className="hint">Equilibrio = gastos {mxn(t.expenses)} + compras de mercancía {mxn(t.spend)}.</p>
+                <p className="hint">Equilibrio = gastos {mxn(t.expenses)} + compras de mercancía {mxn(t.spend)}{fund > 0 ? ` + fondo euros ${mxn(fund)}` : ''}.</p>
               </>
             )}
           </div>
@@ -251,10 +258,11 @@ export default async function Finanzas({ searchParams }) {
 
       <section className="card">
         <h2>Flujo de dinero</h2>
-        <p className="card-sub">Lo que entró por ventas contra lo que salió en mercancía y gastos {period ? 'este mes' : 'desde el inicio'}.</p>
+        <p className="card-sub">Lo que entró por ventas contra lo que salió en mercancía, gastos y el fondo euros {period ? 'este mes' : 'desde el inicio'}.</p>
         <ul className="legend inline">
           <li><i className="sw tone-in" />Ventas</li>
           <li><i className="sw tone-cost" />Compras de mercancía</li>
+          {fund > 0 && <li><i className="sw tone-fund" />Fondo euros</li>}
           <li><i className="sw tone-exp" />Gastos</li>
         </ul>
         <ul className="bars">
@@ -263,9 +271,13 @@ export default async function Finanzas({ searchParams }) {
             <StackBar segments={[{ label: 'Ventas', value: t.revenue, tone: 'in' }]} scale={flowMax} />
           </li>
           <li>
-            <div className="bar-head"><span>Salió</span><strong>{mxn(t.spend + t.expenses)}</strong></div>
+            <div className="bar-head"><span>Salió</span><strong>{mxn(flowOut)}</strong></div>
             <StackBar
-              segments={[{ label: 'Compras de mercancía', value: t.spend, tone: 'cost' }, { label: 'Gastos', value: t.expenses, tone: 'exp' }]}
+              segments={[
+                { label: 'Compras de mercancía', value: t.spend, tone: 'cost' },
+                { label: 'Fondo euros', value: fund, tone: 'fund' },
+                { label: 'Gastos', value: t.expenses, tone: 'exp' },
+              ]}
               scale={flowMax}
             />
           </li>
@@ -275,6 +287,36 @@ export default async function Finanzas({ searchParams }) {
           <strong className={flowNet >= 0 ? 'pos' : 'neg'}>{flowNet > 0 ? '+' : ''}{mxn(flowNet)}</strong>
         </div>
         <p className="hint">Aquí cuenta toda la mercancía que compraste, aunque siga en inventario. La utilidad solo cuenta el costo de lo que ya vendiste.</p>
+      </section>
+
+      <section className="card">
+        <div className="card-head">
+          <h2>Fondo euros</h2>
+          <strong className="fund-total">{mxn(fundTotal)}</strong>
+        </div>
+        <p className="card-sub">
+          Lo que cuesta Claude se retira cada mes desde {mes(INICIO).toLowerCase()} para comprar euros. No es gasto del negocio: no baja tu utilidad, pero sí cuenta en el flujo y en el punto de equilibrio.
+        </p>
+        <div className="stats">
+          <div className="stat">
+            <p className="label">Retiro al mes</p>
+            <p className="num">{retiro > 0 ? mxn(retiro) : '—'}</p>
+            <p className="sub">{retiro > 0 ? `desde ${mesCorto(INICIO)}` : 'sin retiro'}</p>
+          </div>
+          <div className="stat">
+            <p className="label">Juntado</p>
+            <p className="num">{mxn(fundTotal)}</p>
+            <p className="sub">{fundMonthsTotal === 1 ? '1 mes' : `${fundMonthsTotal} meses`}</p>
+          </div>
+        </div>
+        <details className="top-gap">
+          <summary className="link small">Cambiar el retiro mensual</summary>
+          <form action={setRetiro} className="goal-form">
+            <input name="retiro" type="number" step="0.01" min="0" inputMode="decimal" defaultValue={retiro || ''} placeholder="Ej. 400" aria-label="Retiro mensual al fondo euros" />
+            <Submit className="btn small" close>Guardar</Submit>
+          </form>
+          <p className="hint top-gap">El monto aplica a todos los meses desde {mesCorto(INICIO)}. Pon 0 para dejar de contarlo.</p>
+        </details>
       </section>
 
       <section className="card">

@@ -1,6 +1,6 @@
 import Link from 'next/link';
-import { getProducts, getSales, getMonthly, getTotals, getPurchases, getGoal } from '@/lib/data';
-import { mxn, fecha, thisMonth, mes, mesDe, today, pct } from '@/lib/format';
+import { getProducts, getSales, getMonthly, getTotals, getPurchases, getGoal, getRetiro } from '@/lib/data';
+import { mxn, fecha, thisMonth, mes, mesDe, mesesEntre, INICIO, today, pct } from '@/lib/format';
 import { plural, dias } from '@/components/Corte';
 import StackBar from '@/components/StackBar';
 
@@ -15,8 +15,8 @@ const sumBy = (list, f) => list.reduce((a, x) => a + f(x), 0);
 const decimal = (n) => n.toLocaleString('es-MX', { maximumFractionDigits: 1 });
 
 export default async function Inicio() {
-  const [products, allSales, monthly, totals, purchases, goal] = await Promise.all([
-    getProducts(), getSales({ limit: 100000 }), getMonthly(), getTotals(), getPurchases(), getGoal(),
+  const [products, allSales, monthly, totals, purchases, goal, retiro] = await Promise.all([
+    getProducts(), getSales({ limit: 100000 }), getMonthly(), getTotals(), getPurchases(), getGoal(), getRetiro(),
   ]);
 
   const month = thisMonth();
@@ -24,8 +24,9 @@ export default async function Inicio() {
   const monthProfit = m.revenue - m.cogs - m.expenses;
   const monthSales = allSales.filter((s) => mesDe(s.date) === month);
 
-  // Meta y punto de equilibrio del mes (igual que en Finanzas).
-  const breakEven = m.expenses + m.inventory_spend;
+  // Meta y punto de equilibrio del mes (igual que en Finanzas, con el retiro al fondo euros).
+  const fundTotal = retiro * mesesEntre(INICIO, month);
+  const breakEven = m.expenses + m.inventory_spend + (month >= INICIO ? retiro : 0);
   const shortfall = Math.max(breakEven - m.revenue, 0);
 
   // Ventas recientes
@@ -44,7 +45,7 @@ export default async function Inicio() {
   const priced = products.filter((p) => p.stock > 0 && p.sale_price > 0);
   const potential = sumBy(priced, (p) => p.stock * p.sale_price);
   const potentialProfit = potential - sumBy(priced, (p) => p.stock_value);
-  const invested = totals.inventory_spend + totals.expenses;
+  const invested = totals.inventory_spend + totals.expenses + fundTotal;
 
   // Lo más vendido del mes
   const byProduct = new Map();
@@ -227,7 +228,7 @@ export default async function Inicio() {
           <div className="kpi">
             <p className="label">Has invertido</p>
             <p className="num">{mxn(invested)}</p>
-            <p className="sub">compras + gastos</p>
+            <p className="sub">{fundTotal > 0 ? 'compras + gastos + fondo euros' : 'compras + gastos'}</p>
           </div>
           <div className="kpi">
             <p className="label">Has vendido</p>

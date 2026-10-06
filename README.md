@@ -8,7 +8,7 @@ App personal (Next.js + base de datos Neon) para desplegar en Vercel.
 - **Inventario**: existencias = piezas recibidas − vendidas ± ajustes (piezas dañadas, regalos). Precio de venta, margen y aviso de existencias bajas. Filtros por tipo (tarjetas, placas) y por red (Instagram, Google) que salen del nombre de cada producto.
 - **Ventas**: varias piezas por venta, envío cobrado, descuento, canal, forma de pago y ventas por cobrar. Guarda el costo de cada pieza según el corte del que sale (PEPS).
 - **Cortes**: cada pedido recibido es un corte. En Pedidos ves el estado de cada uno, en Inicio los cortes activos con su avance y en Finanzas el resumen de los cortes cerrados.
-- **Finanzas**: por mes o de todo el tiempo. Utilidad y a dónde se fue cada peso vendido, ventas, ticket promedio, margen y lo que te deben; velocímetro del punto de equilibrio (lo que necesitas vender para recuperar tus gastos y tus compras de mercancía) y de tu meta de ventas del mes con ritmo y proyección; flujo de dinero, inventario (valor, ganancia potencial y cuántos días te dura), meses, productos que más dejan, canales de venta, cortes cerrados y gastos por categoría.
+- **Finanzas**: por mes o de todo el tiempo. Utilidad y a dónde se fue cada peso vendido, ventas, ticket promedio, margen y lo que te deben; velocímetro del punto de equilibrio (lo que necesitas vender para recuperar tus gastos, tus compras de mercancía y el fondo euros) y de tu meta de ventas del mes con ritmo y proyección; flujo de dinero, inventario (valor, ganancia potencial y cuántos días te dura), meses, productos que más dejan, canales de venta, cortes cerrados y gastos por categoría.
 - No calcula impuestos.
 
 Ya trae precargados tus 6 pedidos de septiembre 2026 (5 de AliExpress y 1 de Alibaba).
@@ -29,6 +29,11 @@ Ya trae precargados tus 6 pedidos de septiembre 2026 (5 de AliExpress y 1 de Ali
 - **Piezas totales** = paquetes × piezas por paquete (3 paquetes de 5 = 15).
 - **Total que pagaste** = lo que te cobraron a la tarjeta (envío y comisión incluidos).
 - Si te reembolsan, abre el pedido y escribe el **reembolso**. Si nunca llegó, cambia el estado a **Cancelado / no llegó** y sus piezas no cuentan en el inventario.
+
+## Inicio del negocio y fondo euros
+
+- El negocio empieza en **octubre de 2026** (`INICIO` en `lib/format.js`): en Finanzas, lo anterior (la inversión de septiembre) cuenta como de octubre. Las fechas reales de pedidos y ventas no cambian.
+- **Fondo euros:** cada mes desde octubre de 2026 se retiran $400 (lo que cuesta Claude) para comprar euros. No es gasto del negocio (no baja la utilidad), pero cuenta en el flujo de dinero, en el punto de equilibrio y en "Has invertido". El monto se cambia en Finanzas → Fondo euros y aplica a todos los meses.
 
 ## Cómo funcionan los cortes
 

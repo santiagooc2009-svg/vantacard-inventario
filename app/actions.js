@@ -209,7 +209,18 @@ export async function deleteSale(formData) {
   await refreshCosts();
 }
 
-// ---------- Gastos y metas ----------
+// ---------- Gastos, metas y fondo de euros ----------
+
+export async function setRetiro(formData) {
+  await ensureSchema();
+  const amount = Math.max(num(formData.get('retiro')), 0);
+  await q(
+    `insert into app_meta (key, value) values ('retiro_euros', $1)
+     on conflict (key) do update set value = excluded.value`,
+    [String(amount)]
+  );
+  refresh();
+}
 
 export async function setGoal(formData) {
   await ensureSchema();

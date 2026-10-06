@@ -24,6 +24,7 @@
   --c-exp: #eb6834;
   --c-profit: #1baf7a;
   --c-in: #2a78d6;
+  --c-fund: #4a3aa7;
   color-scheme: light;
 }
 
@@ -52,6 +53,7 @@
     --c-exp: #d95926;
     --c-profit: #199e70;
     --c-in: #3987e5;
+    --c-fund: #9085e9;
     color-scheme: dark;
   }
 }
@@ -308,6 +310,7 @@ dl.facts dd { margin: 0; text-align: right; }
 .tone-exp { background: var(--c-exp); }
 .tone-profit { background: var(--c-profit); }
 .tone-in { background: var(--c-in); }
+.tone-fund { background: var(--c-fund); }
 .sw.tone-marker { background: var(--ink); width: 3px; margin: 0 3px 0 4px; }
 
 /* Leyenda con valores */
@@ -359,6 +362,7 @@ dl.facts dd { margin: 0; text-align: right; }
 .kpi .delta.pos { color: var(--pos); }
 .kpi .delta.neg { color: var(--neg); }
 .card-sub { margin: -4px 0 14px; font-size: .82rem; color: var(--ink-2); }
+.fund-total { font-size: 1.15rem; }
 
 /* Formularios */
 label { display: flex; flex-direction: column; gap: 5px; font-size: .8rem; font-weight: 600; color: var(--ink-2); min-width: 0; }
