@@ -8,7 +8,7 @@ App personal (Next.js + base de datos Neon) para desplegar en Vercel.
 - **Inventario**: existencias = piezas recibidas − vendidas ± ajustes (piezas dañadas, regalos). Precio de venta, margen y aviso de existencias bajas.
 - **Ventas**: varias piezas por venta, envío cobrado, descuento, canal, forma de pago y ventas por cobrar. Guarda el costo de cada pieza según el corte del que sale (PEPS).
 - **Cortes**: cada pedido recibido es un corte. En Pedidos ves el estado de cada uno, en Inicio los cortes activos con su avance y en Finanzas el resumen de los cortes cerrados.
-- **Finanzas**: utilidad por mes (ventas − costo de lo vendido − gastos), dinero recuperado, cortes cerrados, gastos y qué producto deja más.
+- **Finanzas**: por mes o de todo el tiempo. Utilidad y a dónde se fue cada peso vendido, ventas, ticket promedio, margen y lo que te deben; velocímetro del punto de equilibrio operativo (gastos ÷ margen bruto) y de tu meta de ventas del mes con ritmo y proyección; flujo de dinero, inventario (valor, ganancia potencial y cuántos días te dura), meses, productos que más dejan, canales de venta, cortes cerrados y gastos por categoría.
 - No calcula impuestos.
 
 Ya trae precargados tus 6 pedidos de septiembre 2026 (5 de AliExpress y 1 de Alibaba).

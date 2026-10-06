@@ -209,7 +209,22 @@ export async function deleteSale(formData) {
   await refreshCosts();
 }
 
-// ---------- Gastos ----------
+// ---------- Gastos y metas ----------
+
+export async function setGoal(formData) {
+  await ensureSchema();
+  const goal = num(formData.get('goal'));
+  if (goal > 0) {
+    await q(
+      `insert into app_meta (key, value) values ('meta_ventas', $1)
+       on conflict (key) do update set value = excluded.value`,
+      [String(goal)]
+    );
+  } else {
+    await q(`delete from app_meta where key = 'meta_ventas'`);
+  }
+  refresh();
+}
 
 export async function createExpense(formData) {
   await ensureSchema();

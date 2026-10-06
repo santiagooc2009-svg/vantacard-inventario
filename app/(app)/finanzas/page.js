@@ -1,148 +1,508 @@
-import { getMonthly, getExpenses, getProducts, getCortes } from '@/lib/data';
-import { createExpense, deleteExpense } from '@/app/actions';
+import Link from 'next/link';
+import { getMonthly, getExpenses, getProducts, getCortes, getSales, getGoal } from '@/lib/data';
+import { createExpense, deleteExpense, setGoal } from '@/app/actions';
 import Submit from '@/components/Submit';
 import ConfirmButton from '@/components/ConfirmButton';
-import { mxn, mes, fecha, today, pct } from '@/lib/format';
+import StackBar from '@/components/StackBar';
+import { Gauge, Legend, Delta } from '@/components/Viz';
 import { corteTitle, dias, plural } from '@/components/Corte';
+import { mxn, mes, mesCorto, mesAnterior, fecha, today, thisMonth, pct } from '@/lib/format';
 
 export const metadata = { title: 'Finanzas · Vantacard' };
 
 const CATEGORIES = ['Envíos a clientes', 'Empaque', 'Publicidad', 'Diseño / impresión', 'Herramientas', 'Comisiones', 'Otros'];
 
-export default async function Finanzas() {
-  const [monthly, expenses, products, cortes] = await Promise.all([
-    getMonthly(), getExpenses(), getProducts({ includeInactive: true }), getCortes(),
+const ZERO = { revenue: 0, cogs: 0, expenses: 0, spend: 0, units: 0 };
+const addMonth = (a, r) => ({
+  revenue: a.revenue + r.revenue, cogs: a.cogs + r.cogs, expenses: a.expenses + r.expenses,
+  spend: a.spend + r.inventory_spend, units: a.units + r.units,
+});
+const decimal = (n) => n.toLocaleString('es-MX', { maximumFractionDigits: 1 });
+const sumBy = (list, f) => list.reduce((a, x) => a + f(x), 0);
+
+export default async function Finanzas({ searchParams }) {
+  const { mes: mesParam } = await searchParams;
+  const [monthly, expenses, products, cortes, sales, goal] = await Promise.all([
+    getMonthly(), getExpenses(), getProducts({ includeInactive: true }), getCortes(), getSales({ limit: 100000 }), getGoal(),
   ]);
 
-  const t = monthly.reduce(
-    (a, r) => ({
-      revenue: a.revenue + r.revenue, cogs: a.cogs + r.cogs, expenses: a.expenses + r.expenses,
-      spend: a.spend + r.inventory_spend,
-    }),
-    { revenue: 0, cogs: 0, expenses: 0, spend: 0 }
-  );
-  const profit = t.revenue - t.cogs - t.expenses;
-  const cash = t.revenue - t.spend - t.expenses;
-  const sold = products.filter((p) => p.sold > 0).sort((a, b) => b.revenue - b.cogs - (a.revenue - a.cogs));
+  // Periodo: un mes (por defecto el actual) o todo. Todo lo de abajo se filtra con él.
+  const current = thisMonth();
+  const months = [...new Set([current, ...monthly.map((r) => r.month)])].sort().reverse();
+  const period = mesParam === 'todo' ? null : months.includes(mesParam) ? mesParam : current;
+  const inPeriod = (date) => !period || (date ?? '').startsWith(period);
+  const isCurrent = period === current;
 
-  const closed = cortes.closed;
+  const t = monthly.filter((r) => inPeriod(r.month)).reduce(addMonth, ZERO);
+  const all = monthly.reduce(addMonth, ZERO);
+  const gross = t.revenue - t.cogs;
+  const profit = gross - t.expenses;
+  const margin = t.revenue > 0 ? gross / t.revenue : null;
+
+  const prevKey = period && mesAnterior(period);
+  const prevRow = prevKey ? monthly.find((r) => r.month === prevKey) : null;
+  const prev = prevRow ? addMonth(ZERO, prevRow) : null;
+  const prevName = prevKey ? mesCorto(prevKey).split(' ')[0] : '';
+
+  const pSales = sales.filter((s) => inPeriod(s.date));
+  const pending = pSales.filter((s) => s.status === 'pendiente');
+
+  // Punto de equilibrio operativo: lo que necesitas vender para que la ganancia de lo vendido
+  // (ventas − costo de las piezas) cubra tus gastos. Si no hay ventas en el periodo usa tu margen histórico.
+  const allMargin = all.revenue > 0 ? (all.revenue - all.cogs) / all.revenue : null;
+  const peMargin = margin ?? allMargin;
+  const breakEven = t.expenses === 0 ? 0 : peMargin > 0 ? t.expenses / peMargin : null;
+  const perPiece = t.units > 0 ? gross / t.units : all.units > 0 ? (all.revenue - all.cogs) / all.units : 0;
+  const toCover = Math.max(t.expenses - gross, 0);
+  const piecesNeeded = toCover > 0 && perPiece > 0 ? Math.ceil(toCover / perPiece) : 0;
+
+  // Ritmo del mes actual
+  const [py, pm] = (period ?? current).split('-').map(Number);
+  const daysInMonth = new Date(Date.UTC(py, pm, 0)).getUTCDate();
+  const dayNow = Number(today().slice(8, 10));
+  const daysLeft = daysInMonth - dayNow + 1;
+  const projection = isCurrent ? (t.revenue / dayNow) * daysInMonth : null;
+
+  const invested = all.spend + all.expenses;
+
+  // Inventario de hoy
+  const stocked = products.filter((p) => p.stock > 0);
+  const invUnits = sumBy(stocked, (p) => p.stock);
+  const invCost = sumBy(stocked, (p) => p.stock_value);
+  const priced = stocked.filter((p) => p.sale_price > 0);
+  const invPotential = sumBy(priced, (p) => p.stock * p.sale_price);
+  const potentialProfit = invPotential - sumBy(priced, (p) => p.stock_value);
+  const cutoff = new Date(today() + 'T00:00:00Z');
+  cutoff.setUTCDate(cutoff.getUTCDate() - 29);
+  const since = cutoff.toISOString().slice(0, 10);
+  const sold30 = sumBy(sales.filter((s) => s.date >= since), (s) => sumBy(s.items, (i) => i.qty));
+  const coverDays = sold30 > 0 ? Math.round(invUnits / (sold30 / 30)) : null;
+  const openShort = sumBy(cortes.open, (c) => Math.max(c.cost - c.revenue, 0));
+
+  // Productos, canales y gastos del periodo
+  const byProduct = new Map();
+  for (const s of pSales) {
+    for (const i of s.items) {
+      const r = byProduct.get(i.name) ?? { name: i.name, units: 0, revenue: 0, cost: 0 };
+      r.units += i.qty;
+      r.revenue += i.qty * i.unit_price;
+      r.cost += i.qty * i.unit_cost;
+      byProduct.set(i.name, r);
+    }
+  }
+  const topProducts = [...byProduct.values()].map((r) => ({ ...r, profit: r.revenue - r.cost })).sort((a, b) => b.profit - a.profit);
+
+  const byChannel = new Map();
+  for (const s of pSales) {
+    const k = s.channel || 'Sin canal';
+    const r = byChannel.get(k) ?? { name: k, total: 0, count: 0 };
+    r.total += s.total;
+    r.count += 1;
+    byChannel.set(k, r);
+  }
+  const channels = [...byChannel.values()].sort((a, b) => b.total - a.total);
+  const channelTotal = sumBy(channels, (c) => c.total);
+
+  const pExpenses = expenses.filter((e) => inPeriod(e.date));
+  const byCategory = new Map();
+  for (const e of pExpenses) byCategory.set(e.category, (byCategory.get(e.category) ?? 0) + e.amount);
+  const categories = [...byCategory.entries()].map(([name, amount]) => ({ name, amount })).sort((a, b) => b.amount - a.amount);
+
+  const closed = cortes.closed.filter((c) => inPeriod(c.endedOn));
   const ct = closed.reduce(
     (a, c) => ({ cost: a.cost + c.cost, revenue: a.revenue + c.revenue, days: a.days + c.days, sold: a.sold + c.sold, lost: a.lost + c.lost }),
     { cost: 0, revenue: 0, days: 0, sold: 0, lost: 0 }
   );
 
+  const monthMax = Math.max(...monthly.map((r) => Math.max(r.revenue, r.cogs + r.expenses)), 0);
+  const flowMax = Math.max(t.revenue, t.spend + t.expenses);
+  const flowNet = t.revenue - t.spend - t.expenses;
+  const breakdown = [
+    { label: 'Costo de lo vendido', value: t.cogs, tone: 'cost' },
+    { label: 'Gastos', value: t.expenses, tone: 'exp' },
+  ];
+
   return (
     <div className="stack-lg">
-      <h1>Finanzas</h1>
+      <div className="page-head">
+        <h1>Finanzas</h1>
+      </div>
+
+      <nav className="chips" aria-label="Periodo">
+        {months.map((m) => (
+          <Link key={m} href={`/finanzas?mes=${m}`} scroll={false} className={'chip' + (period === m ? ' on' : '')}>
+            {m === current ? 'Este mes' : mesCorto(m)}
+          </Link>
+        ))}
+        <Link href="/finanzas?mes=todo" scroll={false} className={'chip' + (!period ? ' on' : '')}>Todo</Link>
+      </nav>
+
+      <section className="hero">
+        <p className="eyebrow">{period ? mes(period) : 'Todo el tiempo'}</p>
+        <div>
+          <p className="label">Utilidad {period ? 'del mes' : 'total'}</p>
+          <p className={'hero-num ' + (profit >= 0 ? 'pos' : 'neg')}>{mxn(profit)}</p>
+          <div className="hero-meta">
+            <span>Ventas {mxn(t.revenue)}{t.revenue > 0 ? ` · margen neto ${pct(profit / t.revenue)}` : ''}</span>
+            {prev && <Delta now={profit} before={prev.revenue - prev.cogs - prev.expenses} vs={prevName} money />}
+          </div>
+        </div>
+        {t.revenue > 0 || t.expenses > 0 ? (
+          <>
+            <p className="label">{profit >= 0 ? '¿A dónde se fue lo que vendiste?' : 'Tus costos y gastos superaron lo que vendiste'}</p>
+            {profit >= 0 ? (
+              <StackBar size="lg" segments={[...breakdown, { label: 'Utilidad', value: profit, tone: 'profit' }]} />
+            ) : (
+              <StackBar size="lg" segments={breakdown} marker={t.revenue > 0 ? t.revenue : undefined} />
+            )}
+            <Legend
+              total={t.revenue}
+              items={profit >= 0 ? [...breakdown, { label: 'Utilidad', value: profit, tone: 'profit' }] : [...breakdown, ...(t.revenue > 0 ? [{ label: 'Lo que vendiste (rayita)', value: t.revenue, tone: 'marker' }] : [])]}
+            />
+          </>
+        ) : (
+          <p className="hero-meta">Sin ventas ni gastos en este periodo.</p>
+        )}
+      </section>
 
       <section className="kpis">
         <div className="kpi">
-          <p className="label">Utilidad total</p>
-          <p className={'num ' + (profit >= 0 ? 'pos' : 'neg')}>{mxn(profit)}</p>
-          <p className="sub">ventas − costo de lo vendido − gastos</p>
+          <p className="label">Ventas</p>
+          <p className="num">{mxn(t.revenue)}</p>
+          <p className="sub">{plural(pSales.length, 'venta')} · {t.units} pzas</p>
+          {prev && <Delta now={t.revenue} before={prev.revenue} vs={prevName} />}
         </div>
         <div className="kpi">
-          <p className="label">Dinero recuperado</p>
-          <p className={'num ' + (cash >= 0 ? 'pos' : 'neg')}>{mxn(cash)}</p>
-          <p className="sub">ventas − todo lo que has gastado</p>
+          <p className="label">Ticket promedio</p>
+          <p className="num">{mxn(pSales.length ? t.revenue / pSales.length : 0)}</p>
+          <p className="sub">{pSales.length ? `${decimal(t.units / pSales.length)} piezas por venta` : 'sin ventas'}</p>
         </div>
+        <div className="kpi">
+          <p className="label">Margen bruto</p>
+          <p className="num">{margin == null ? '—' : pct(margin)}</p>
+          <p className="sub">ganancia bruta {mxn(gross)}</p>
+        </div>
+        <div className="kpi">
+          <p className="label">Por cobrar</p>
+          <p className={'num' + (pending.length ? ' warn' : '')}>{mxn(sumBy(pending, (s) => s.total))}</p>
+          <p className="sub">{pending.length ? `${plural(pending.length, 'venta')} sin cobrar` : 'todo cobrado'}</p>
+        </div>
+      </section>
+
+      <section className="card">
+        <h2>Metas y equilibrio</h2>
+        <p className="card-sub">{period ? 'Cómo vas este mes contra tus gastos y tu meta.' : 'Cómo vas contra tus gastos y lo que has invertido desde el inicio.'}</p>
+        <div className="gauges">
+          <div className="gauge-card">
+            <p className="title">Punto de equilibrio operativo</p>
+            {breakEven === 0 ? (
+              <p className="muted small">
+                No hay gastos registrados {period ? 'este mes' : 'todavía'}: todo lo que ganas en tus ventas ya es utilidad. Registra tus gastos (envíos, empaque, anuncios) para calcularlo.
+              </p>
+            ) : breakEven == null ? (
+              <p className="muted small">Todavía no hay ventas con ganancia para calcular cuánto necesitas vender.</p>
+            ) : (
+              <>
+                <Gauge
+                  value={t.revenue} max={breakEven * 2} mark={breakEven} markLabel="equilibrio"
+                  label={`Ventas ${mxn(t.revenue)} de ${mxn(breakEven)} para el equilibrio`}
+                />
+                <p className="gauge-value">{pct(t.revenue / breakEven)}</p>
+                <p className="gauge-caption">del equilibrio ({mxn(breakEven)} en ventas)</p>
+                {toCover === 0 ? (
+                  <p className="gauge-text"><strong className="pos">✓ Ya cubriste tus gastos.</strong> Vas {mxn(t.revenue - breakEven)} arriba del equilibrio.</p>
+                ) : (
+                  <p className="gauge-text">
+                    Te faltan <strong>{mxn(breakEven - t.revenue)}</strong> en ventas{piecesNeeded > 0 ? ` (unas ${plural(piecesNeeded, 'pieza')})` : ''} para cubrir {mxn(t.expenses)} de gastos.
+                  </p>
+                )}
+                <p className="hint">Equilibrio = gastos {mxn(t.expenses)} ÷ margen bruto {pct(peMargin)}{margin == null ? ' (histórico)' : ''}.</p>
+              </>
+            )}
+          </div>
+
+          {period ? (
+            <div className="gauge-card">
+              <p className="title">Meta de ventas del mes</p>
+              {goal ? (
+                <>
+                  <Gauge value={t.revenue} max={goal} label={`Ventas ${mxn(t.revenue)} de una meta de ${mxn(goal)}`} />
+                  <p className="gauge-value">{pct(t.revenue / goal)}</p>
+                  <p className="gauge-caption">{mxn(t.revenue)} de {mxn(goal)}</p>
+                  {t.revenue >= goal ? (
+                    <p className="gauge-text"><strong className="pos">✓ Meta cumplida.</strong>{t.revenue > goal ? ` Vas ${mxn(t.revenue - goal)} arriba.` : ''}</p>
+                  ) : isCurrent ? (
+                    <p className="gauge-text">
+                      Te faltan <strong>{mxn(goal - t.revenue)}</strong>: unos {mxn((goal - t.revenue) / daysLeft)} por día en {daysLeft === 1 ? 'el día que queda' : `los ${daysLeft} días que quedan`}.
+                    </p>
+                  ) : (
+                    <p className="gauge-text">Cerraste el mes a {mxn(goal - t.revenue)} de tu meta.</p>
+                  )}
+                  {isCurrent && t.revenue > 0 && (
+                    <p className="hint">A este ritmo cierras el mes en {mxn(projection)} ({pct(projection / goal)} de la meta).</p>
+                  )}
+                  <details>
+                    <summary className="link small">Cambiar meta</summary>
+                    <GoalForm goal={goal} />
+                  </details>
+                </>
+              ) : (
+                <>
+                  <p className="muted small">Ponte una meta de ventas al mes y aquí verás cuánto llevas, cuánto te falta por día y en cuánto vas a cerrar.</p>
+                  <GoalForm />
+                </>
+              )}
+            </div>
+          ) : invested > 0 ? (
+            <div className="gauge-card">
+              <p className="title">Recuperación de lo invertido</p>
+              <Gauge value={all.revenue} max={invested} label={`Ventas ${mxn(all.revenue)} de ${mxn(invested)} invertidos`} />
+              <p className="gauge-value">{pct(all.revenue / invested)}</p>
+              <p className="gauge-caption">{mxn(all.revenue)} vendidos de {mxn(invested)} invertidos</p>
+              {all.revenue >= invested ? (
+                <p className="gauge-text"><strong className="pos">✓ Ya recuperaste todo lo invertido</strong> y llevas {mxn(all.revenue - invested)} encima.</p>
+              ) : (
+                <p className="gauge-text">Te faltan <strong>{mxn(invested - all.revenue)}</strong> en ventas para recuperar lo que has puesto en mercancía y gastos.</p>
+              )}
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="card">
+        <h2>Flujo de dinero</h2>
+        <p className="card-sub">Lo que entró por ventas contra lo que salió en mercancía y gastos {period ? 'este mes' : 'desde el inicio'}.</p>
+        <ul className="legend inline">
+          <li><i className="sw tone-in" />Ventas</li>
+          <li><i className="sw tone-cost" />Compras de mercancía</li>
+          <li><i className="sw tone-exp" />Gastos</li>
+        </ul>
+        <ul className="bars">
+          <li>
+            <div className="bar-head"><span>Entró</span><strong>{mxn(t.revenue)}</strong></div>
+            <StackBar segments={[{ label: 'Ventas', value: t.revenue, tone: 'in' }]} scale={flowMax} />
+          </li>
+          <li>
+            <div className="bar-head"><span>Salió</span><strong>{mxn(t.spend + t.expenses)}</strong></div>
+            <StackBar
+              segments={[{ label: 'Compras de mercancía', value: t.spend, tone: 'cost' }, { label: 'Gastos', value: t.expenses, tone: 'exp' }]}
+              scale={flowMax}
+            />
+          </li>
+        </ul>
+        <div className="flow-net">
+          <span className="muted">Neto</span>
+          <strong className={flowNet >= 0 ? 'pos' : 'neg'}>{flowNet > 0 ? '+' : ''}{mxn(flowNet)}</strong>
+        </div>
+        <p className="hint">Aquí cuenta toda la mercancía que compraste, aunque siga en inventario. La utilidad solo cuenta el costo de lo que ya vendiste.</p>
+      </section>
+
+      <section className="card">
+        <div className="card-head">
+          <h2>Inventario hoy</h2>
+          <Link href="/inventario" className="link">Ver</Link>
+        </div>
+        <div className="stats four">
+          <div className="stat">
+            <p className="label">Mercancía a costo</p>
+            <p className="num">{mxn(invCost)}</p>
+            <p className="sub">{invUnits} piezas</p>
+          </div>
+          <div className="stat">
+            <p className="label">Si la vendes a tus precios</p>
+            <p className="num">{mxn(invPotential)}</p>
+            <p className="sub">ganancia {mxn(potentialProfit)}</p>
+          </div>
+          <div className="stat">
+            <p className="label">Te dura</p>
+            <p className="num">{coverDays == null ? '—' : `~${dias(coverDays)}`}</p>
+            <p className="sub">{sold30 ? `vendes ${decimal(sold30 / 30)} pzas al día` : 'sin ventas en 30 días'}</p>
+          </div>
+          <div className="stat">
+            <p className="label">Cortes abiertos</p>
+            <p className="num">{cortes.open.length}</p>
+            <p className="sub">falta recuperar {mxn(openShort)}</p>
+          </div>
+        </div>
+        {stocked.length > priced.length && (
+          <p className="hint warn top-gap">
+            {plural(stocked.length - priced.length, 'producto')} con piezas sin precio de venta: no cuentan en “si la vendes”.
+          </p>
+        )}
       </section>
 
       <section className="card">
         <h2>Por mes</h2>
+        <p className="card-sub">Las ventas de cada mes repartidas en costo de lo vendido, gastos y utilidad. Toca un mes para verlo.</p>
+        <ul className="legend inline">
+          <li><i className="sw tone-cost" />Costo de lo vendido</li>
+          <li><i className="sw tone-exp" />Gastos</li>
+          <li><i className="sw tone-profit" />Utilidad</li>
+        </ul>
         {monthly.length === 0 ? (
           <p className="muted">Sin movimientos todavía.</p>
         ) : (
-          <div className="months">
+          <ul className="bars">
             {monthly.map((r) => {
               const p = r.revenue - r.cogs - r.expenses;
+              const segs = [
+                { label: 'Costo de lo vendido', value: r.cogs, tone: 'cost' },
+                { label: 'Gastos', value: r.expenses, tone: 'exp' },
+              ];
               return (
-                <div key={r.month} className="month">
-                  <div className="month-head">
-                    <strong>{mes(r.month)}</strong>
+                <li key={r.month} className={period && r.month !== period ? 'dim' : ''}>
+                  <div className="bar-head">
+                    <Link href={`/finanzas?mes=${r.month}`} scroll={false} className="title">{mes(r.month)}</Link>
                     <strong className={p >= 0 ? 'pos' : 'neg'}>{mxn(p)}</strong>
                   </div>
-                  <dl>
-                    <dt>Ventas ({r.units} pzas)</dt><dd>{mxn(r.revenue)}</dd>
-                    <dt>Costo de lo vendido</dt><dd>−{mxn(r.cogs)}</dd>
-                    <dt>Gastos</dt><dd>−{mxn(r.expenses)}</dd>
-                    <dt className="muted">Compras de inventario</dt><dd className="muted">{mxn(r.inventory_spend)}</dd>
-                  </dl>
-                </div>
+                  <StackBar
+                    segments={p >= 0 ? [...segs, { label: 'Utilidad', value: p, tone: 'profit' }] : segs}
+                    marker={p < 0 && r.revenue > 0 ? r.revenue : undefined}
+                    scale={monthMax}
+                  />
+                  <p className="muted small">
+                    {r.revenue > 0 ? `Ventas ${mxn(r.revenue)} · ${r.units} pzas` : 'Sin ventas'} · compras {mxn(r.inventory_spend)}
+                  </p>
+                </li>
               );
             })}
-          </div>
+          </ul>
         )}
-        <p className="hint">
-          La utilidad solo cuenta el costo de las piezas que ya vendiste. Lo que compraste y sigue en inventario no es pérdida: es mercancía.
-        </p>
+      </section>
+
+      <section className="card">
+        <h2>Qué producto deja más</h2>
+        <p className="card-sub">Ganancia de cada producto: lo que vendiste menos lo que te costaron esas piezas.</p>
+        {topProducts.length === 0 ? (
+          <p className="muted">Sin ventas en este periodo.</p>
+        ) : (
+          <ul className="bars">
+            {topProducts.map((r) => (
+              <li key={r.name}>
+                <div className="bar-head">
+                  <span className="title">{r.name}</span>
+                  <strong className={r.profit >= 0 ? 'pos' : 'neg'}>{mxn(r.profit)}</strong>
+                </div>
+                <StackBar size="sm" segments={[{ label: 'Ganancia', value: r.profit, tone: 'profit' }]} scale={topProducts[0].profit} />
+                <p className="muted small">{plural(r.units, 'vendida')} · ventas {mxn(r.revenue)} · margen {pct(r.revenue ? r.profit / r.revenue : 0)}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="card">
+        <h2>De dónde vienen tus ventas</h2>
+        <p className="card-sub">Ventas por canal, con envío y descuento.</p>
+        {channels.length === 0 ? (
+          <p className="muted">Sin ventas en este periodo.</p>
+        ) : (
+          <ul className="bars">
+            {channels.map((c) => (
+              <li key={c.name}>
+                <div className="bar-head">
+                  <span className="title">{c.name}</span>
+                  <span><strong>{mxn(c.total)}</strong> <span className="muted small">{pct(c.total / channelTotal)}</span></span>
+                </div>
+                <StackBar size="sm" segments={[{ label: c.name, value: c.total, tone: 'in' }]} scale={channels[0].total} />
+                <p className="muted small">{plural(c.count, 'venta')} · ticket {mxn(c.total / c.count)}</p>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section className="card">
         <h2>Cortes cerrados</h2>
+        <p className="card-sub">Pedidos que ya se vendieron completos{period ? ' este mes' : ''}: lo que te costaron contra lo que vendiste.</p>
         {closed.length === 0 ? (
           <p className="muted">
-            Todavía no se acaba ningún pedido. Cada pedido recibido es un corte y se cierra solo cuando vendes o das de baja todas sus piezas.
+            {period ? 'Ningún corte se cerró en este periodo.' : 'Todavía no se acaba ningún pedido.'} Un corte se cierra solo cuando vendes o das de baja todas sus piezas.
           </p>
         ) : (
           <div className="stack">
-            <div className="month">
-              <dl className="facts">
-                <dt>{closed.length === 1 ? '1 corte cerrado' : `${closed.length} cortes cerrados`}</dt><dd>{plural(ct.sold, 'vendida')}{ct.lost > 0 ? ` · ${plural(ct.lost, 'perdida')}` : ''}</dd>
-                <dt>Te costaron</dt><dd>{mxn(ct.cost)}</dd>
-                <dt>Vendiste</dt><dd>{mxn(ct.revenue)}</dd>
-                <dt>Ganancia</dt><dd className={ct.revenue - ct.cost >= 0 ? 'pos' : 'neg'}><strong>{mxn(ct.revenue - ct.cost)}</strong></dd>
-                <dt>Recuperado</dt><dd>{ct.cost > 0 ? pct(ct.revenue / ct.cost) : '—'}</dd>
-                <dt>Se acaban en promedio en</dt><dd>{dias(Math.round(ct.days / closed.length))}</dd>
-              </dl>
+            <div className="stats four">
+              <div className="stat"><p className="label">Cortes</p><p className="num">{closed.length}</p><p className="sub">{plural(ct.sold, 'vendida')}{ct.lost > 0 ? ` · ${plural(ct.lost, 'perdida')}` : ''}</p></div>
+              <div className="stat"><p className="label">Ganancia</p><p className={'num ' + (ct.revenue - ct.cost >= 0 ? 'pos' : 'neg')}>{mxn(ct.revenue - ct.cost)}</p><p className="sub">costaron {mxn(ct.cost)}</p></div>
+              <div className="stat"><p className="label">Recuperado</p><p className="num">{ct.cost > 0 ? pct(ct.revenue / ct.cost) : '—'}</p><p className="sub">vendiste {mxn(ct.revenue)}</p></div>
+              <div className="stat"><p className="label">Se acaban en</p><p className="num">{dias(Math.round(ct.days / closed.length))}</p><p className="sub">en promedio</p></div>
             </div>
-            <ul className="list compact">
+            <ul className="legend inline">
+              <li><i className="sw tone-cost" />Costo del pedido</li>
+              <li><i className="sw tone-profit" />Ganancia</li>
+            </ul>
+            <ul className="bars">
               {closed.map((c) => (
-                <li key={c.id} className="row">
-                  <div>
-                    <p className="title">{corteTitle(c)}</p>
-                    <p className="muted small">
-                      {fecha(c.date)} → {fecha(c.endedOn)} · {dias(c.days)} · {plural(c.sold, 'vendida')}{c.lost > 0 ? ` · ${plural(c.lost, 'perdida')}` : ''}
-                    </p>
-                    <p className="muted small">Costó {mxn(c.cost)} · vendiste {mxn(c.revenue)}</p>
+                <li key={c.id}>
+                  <div className="bar-head">
+                    <span className="title">{corteTitle(c)}</span>
+                    <strong className={c.profit >= 0 ? 'pos' : 'neg'}>{mxn(c.profit)}</strong>
                   </div>
-                  <div className="right">
-                    <p className={'title ' + (c.profit >= 0 ? 'pos' : 'neg')}>{mxn(c.profit)}</p>
-                    {c.recovered != null && <p className="muted small">{pct(c.recovered)} recuperado</p>}
-                  </div>
+                  <StackBar
+                    size="sm"
+                    segments={c.profit >= 0
+                      ? [{ label: 'Costo del pedido', value: c.cost, tone: 'cost' }, { label: 'Ganancia', value: c.profit, tone: 'profit' }]
+                      : [{ label: 'Costo del pedido', value: c.cost, tone: 'cost' }]}
+                    marker={c.profit < 0 && c.revenue > 0 ? c.revenue : undefined}
+                    scale={Math.max(...closed.map((x) => Math.max(x.revenue, x.cost)))}
+                  />
+                  <p className="muted small">
+                    {[
+                      `${fecha(c.date)} → ${fecha(c.endedOn)}`, dias(c.days), plural(c.sold, 'vendida'),
+                      c.lost > 0 && plural(c.lost, 'perdida'), c.recovered != null && `${pct(c.recovered)} recuperado`,
+                    ].filter(Boolean).join(' · ')}
+                  </p>
                 </li>
               ))}
             </ul>
           </div>
         )}
-        <p className="hint">
-          Ganancia de un corte = lo que vendiste de sus piezas (con envío y descuento) − lo que pagaste por el pedido. Las piezas perdidas ya van dentro de ese costo.
-        </p>
       </section>
 
-      {sold.length > 0 && (
-        <section className="card">
-          <h2>Qué producto deja más</h2>
-          <ul className="list compact">
-            {sold.map((p) => {
-              const g = p.revenue - p.cogs;
-              return (
-                <li key={p.id} className="row">
-                  <div>
-                    <p className="title">{p.name}</p>
-                    <p className="muted small">{p.sold} vendidas · {mxn(p.revenue)} · margen {pct(p.revenue ? g / p.revenue : 0)}</p>
+      <section className="card">
+        <h2>Gastos{period ? ' del mes' : ''}</h2>
+        <p className="card-sub">Todo lo que no es mercancía: envíos que pagas tú, bolsitas, anuncios, etc.</p>
+        {pExpenses.length === 0 ? (
+          <p className="muted">Sin gastos en este periodo.</p>
+        ) : (
+          <div className="stack">
+            <ul className="bars">
+              {categories.map((c) => (
+                <li key={c.name}>
+                  <div className="bar-head">
+                    <span className="title">{c.name}</span>
+                    <span><strong>{mxn(c.amount)}</strong> <span className="muted small">{pct(c.amount / t.expenses)}</span></span>
                   </div>
-                  <p className={'title ' + (g >= 0 ? 'pos' : 'neg')}>{mxn(g)}</p>
+                  <StackBar size="sm" segments={[{ label: c.name, value: c.amount, tone: 'exp' }]} scale={categories[0].amount} />
                 </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
+              ))}
+            </ul>
+            <details>
+              <summary className="link small">{pExpenses.length === 1 ? 'Ver el gasto' : `Ver los ${pExpenses.length} gastos`}</summary>
+              <ul className="list compact">
+                {pExpenses.map((e) => (
+                  <li key={e.id} className="row">
+                    <div>
+                      <p className="title">{e.category}</p>
+                      <p className="muted small">{fecha(e.date)}{e.description ? ' · ' + e.description : ''}</p>
+                    </div>
+                    <div className="right row-actions">
+                      <p className="title">{mxn(e.amount)}</p>
+                      <form action={deleteExpense}>
+                        <input type="hidden" name="id" value={e.id} />
+                        <ConfirmButton message="¿Borrar este gasto?">Borrar</ConfirmButton>
+                      </form>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          </div>
+        )}
+      </section>
 
       <details className="card" id="gasto" open={expenses.length === 0}>
         <summary><h2>Registrar gasto</h2></summary>
-        <p className="muted small">Todo lo que no es mercancía: envíos que pagas tú, bolsitas, anuncios, etc.</p>
         <form action={createExpense} className="stack">
           <div className="grid-2">
             <label>
@@ -167,29 +527,15 @@ export default async function Finanzas() {
           <Submit>Guardar gasto</Submit>
         </form>
       </details>
-
-      {expenses.length > 0 && (
-        <section className="card">
-          <h2>Gastos</h2>
-          <ul className="list compact">
-            {expenses.map((e) => (
-              <li key={e.id} className="row">
-                <div>
-                  <p className="title">{e.category}</p>
-                  <p className="muted small">{fecha(e.date)}{e.description ? ' · ' + e.description : ''}</p>
-                </div>
-                <div className="right row-actions">
-                  <p className="title">{mxn(e.amount)}</p>
-                  <form action={deleteExpense}>
-                    <input type="hidden" name="id" value={e.id} />
-                    <ConfirmButton message="¿Borrar este gasto?">Borrar</ConfirmButton>
-                  </form>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
     </div>
+  );
+}
+
+function GoalForm({ goal }) {
+  return (
+    <form action={setGoal} className="goal-form">
+      <input name="goal" type="number" step="1" min="0" inputMode="decimal" defaultValue={goal || ''} placeholder="Ej. 5000" aria-label="Meta de ventas al mes" />
+      <Submit className="btn small" close>Guardar meta</Submit>
+    </form>
   );
 }
