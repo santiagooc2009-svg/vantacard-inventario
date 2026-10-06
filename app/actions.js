@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { q, one } from '@/lib/db';
 import { ensureSchema } from '@/lib/schema';
-import { getProducts } from '@/lib/data';
+import { syncSaleCosts } from '@/lib/cortes';
 import { COOKIE, tokenFor } from '@/lib/auth';
 import { today } from '@/lib/format';
 
@@ -22,6 +22,12 @@ const dateOr = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v)) ? String(v) : today
 
 function refresh() {
   revalidatePath('/', 'layout');
+}
+
+// Para cambios que mueven piezas: reacomoda los cortes y el costo PEPS de cada venta.
+async function refreshCosts() {
+  await syncSaleCosts();
+  refresh();
 }
 
 // ---------- Sesión ----------
@@ -83,13 +89,13 @@ export async function adjustStock(formData) {
     `insert into stock_adjustments (date, product_id, qty, reason) values ($1,$2,$3,$4)`,
     [dateOr(formData.get('date')), productId, qty, txt(formData.get('reason'))]
   );
-  refresh();
+  await refreshCosts();
 }
 
 export async function deleteAdjustment(formData) {
   await ensureSchema();
   await q(`delete from stock_adjustments where id=$1`, [int(formData.get('id'))]);
-  refresh();
+  await refreshCosts();
 }
 
 // ---------- Pedidos a proveedores ----------
@@ -131,7 +137,7 @@ export async function createPurchase(formData) {
     await q(`insert into purchase_items (purchase_id, product_id, units, subtotal) values ($1,$2,$3,$4)`,
       [pur.id, l.productId, l.units, l.subtotal]);
   }
-  refresh();
+  await refreshCosts();
 }
 
 function statusPurchase(v) {
@@ -147,13 +153,13 @@ export async function updatePurchase(formData) {
     [id, statusPurchase(formData.get('status')), num(formData.get('total_paid')), num(formData.get('refund')),
      txt(formData.get('notes')), dateOr(formData.get('date'))]
   );
-  refresh();
+  await refreshCosts();
 }
 
 export async function deletePurchase(formData) {
   await ensureSchema();
   await q(`delete from purchases where id=$1`, [int(formData.get('id'))]);
-  refresh();
+  await refreshCosts();
 }
 
 // ---------- Ventas ----------
@@ -164,15 +170,12 @@ export async function createSale(formData) {
   const qtys = formData.getAll('qty');
   const prices = formData.getAll('price');
 
-  const products = await getProducts({ includeInactive: true });
-  const costOf = Object.fromEntries(products.map((p) => [p.id, p.avg_cost]));
-
   const lines = [];
   for (let i = 0; i < ids.length; i++) {
     const productId = int(ids[i]);
     const qty = int(qtys[i]);
     if (!productId || qty <= 0) continue;
-    lines.push({ productId, qty, price: num(prices[i]), cost: costOf[productId] ?? 0 });
+    lines.push({ productId, qty, price: num(prices[i]) });
   }
   if (!lines.length) return;
 
@@ -183,11 +186,12 @@ export async function createSale(formData) {
      txt(formData.get('payment_method')), num(formData.get('shipping_charged')), num(formData.get('discount')),
      formData.get('status') === 'pendiente' ? 'pendiente' : 'pagada', txt(formData.get('notes'))]
   );
+  // El costo de cada pieza lo pone refreshCosts() con PEPS, según el corte que se está gastando.
   for (const l of lines) {
-    await q(`insert into sale_items (sale_id, product_id, qty, unit_price, unit_cost) values ($1,$2,$3,$4,$5)`,
-      [sale.id, l.productId, l.qty, l.price, l.cost]);
+    await q(`insert into sale_items (sale_id, product_id, qty, unit_price) values ($1,$2,$3,$4)`,
+      [sale.id, l.productId, l.qty, l.price]);
   }
-  refresh();
+  await refreshCosts();
 }
 
 export async function toggleSaleStatus(formData) {
@@ -202,7 +206,7 @@ export async function toggleSaleStatus(formData) {
 export async function deleteSale(formData) {
   await ensureSchema();
   await q(`delete from sales where id=$1`, [int(formData.get('id'))]);
-  refresh();
+  await refreshCosts();
 }
 
 // ---------- Gastos ----------

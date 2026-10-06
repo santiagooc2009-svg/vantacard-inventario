@@ -10,7 +10,7 @@ export default async function Inventario() {
   const [products, adjustments] = await Promise.all([getProducts({ includeInactive: true }), getAdjustments()]);
   const active = products.filter((p) => p.active);
   const archived = products.filter((p) => !p.active);
-  const value = active.reduce((a, p) => a + Math.max(p.stock, 0) * p.avg_cost, 0);
+  const value = active.reduce((a, p) => a + p.stock_value, 0);
   const units = active.reduce((a, p) => a + Math.max(p.stock, 0), 0);
 
   return (
@@ -27,6 +27,7 @@ export default async function Inventario() {
       <details className="card">
         <summary><h2>Ajustar existencias</h2></summary>
         <p className="muted small">Para piezas dañadas, que no se pudieron programar, regalos o un conteo físico distinto.</p>
+        <p className="hint">Las piezas que sacas se descuentan del pedido más viejo (cuentan como perdidas en su corte). Las que agregas no tienen costo y se usan hasta que se acaban tus pedidos de ese producto.</p>
         <form action={adjustStock} className="stack">
           <label>
             Producto
@@ -117,7 +118,7 @@ export default async function Inventario() {
 }
 
 function ProductCard({ p }) {
-  const margin = p.sale_price > 0 ? (p.sale_price - p.avg_cost) / p.sale_price : null;
+  const margin = p.sale_price > 0 ? (p.sale_price - p.unit_cost) / p.sale_price : null;
   const low = p.stock <= p.min_stock && p.received > 0;
   return (
     <li className="card product">
@@ -125,7 +126,7 @@ function ProductCard({ p }) {
         <div>
           <p className="title">{p.name}</p>
           <p className="muted small">
-            {p.sku ? p.sku + ' · ' : ''}Costo real {mxn(p.avg_cost)} c/u
+            {p.sku ? p.sku + ' · ' : ''}Costo real {mxn(p.unit_cost)} c/u
             {p.in_transit > 0 && <> · <span className="info">{p.in_transit} en camino</span></>}
           </p>
         </div>

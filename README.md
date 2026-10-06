@@ -6,8 +6,9 @@ App personal (Next.js + base de datos Neon) para desplegar en Vercel.
 
 - **Pedidos**: registras lo que compras en AliExpress, Alibaba, etc. Pones el total que te cobraron y los reembolsos; la app calcula el **costo real por pieza** (con envío y comisiones incluidos).
 - **Inventario**: existencias = piezas recibidas − vendidas ± ajustes (piezas dañadas, regalos). Precio de venta, margen y aviso de existencias bajas.
-- **Ventas**: varias piezas por venta, envío cobrado, descuento, canal, forma de pago y ventas por cobrar. Guarda el costo de cada pieza al momento de la venta.
-- **Finanzas**: utilidad por mes (ventas − costo de lo vendido − gastos), dinero recuperado, gastos y qué producto deja más.
+- **Ventas**: varias piezas por venta, envío cobrado, descuento, canal, forma de pago y ventas por cobrar. Guarda el costo de cada pieza según el corte del que sale (PEPS).
+- **Cortes**: cada pedido recibido es un corte. En Pedidos ves el estado de cada uno, en Inicio los cortes activos con su avance y en Finanzas el resumen de los cortes cerrados.
+- **Finanzas**: utilidad por mes (ventas − costo de lo vendido − gastos), dinero recuperado, cortes cerrados, gastos y qué producto deja más.
 - No calcula impuestos.
 
 Ya trae precargados tus 6 pedidos de septiembre 2026 (5 de AliExpress y 1 de Alibaba).
@@ -28,6 +29,17 @@ Ya trae precargados tus 6 pedidos de septiembre 2026 (5 de AliExpress y 1 de Ali
 - **Piezas totales** = paquetes × piezas por paquete (3 paquetes de 5 = 15).
 - **Total que pagaste** = lo que te cobraron a la tarjeta (envío y comisión incluidos).
 - Si te reembolsan, abre el pedido y escribe el **reembolso**. Si nunca llegó, cambia el estado a **Cancelado / no llegó** y sus piezas no cuentan en el inventario.
+
+## Cómo funcionan los cortes
+
+- Cada pedido **recibido** es un corte. Los pedidos en camino o cancelados no son cortes.
+- Las ventas y las piezas que sacas con un ajuste (mermas) gastan primero las piezas del **pedido más viejo** (PEPS). El orden es por fecha del pedido.
+- El costo que guarda cada venta sale del corte del que salieron sus piezas. Si una venta toma piezas de dos cortes, guarda el costo combinado.
+- Un corte se **cierra solo** cuando se acaban todas sus piezas (si el pedido trae varios productos, cuando se acaban todos).
+- Por cada corte ves: lo que costó el pedido (pagado − reembolso), piezas vendidas y perdidas, lo que vendiste (total de cada venta, con envío y descuento, repartido entre sus piezas según su precio), ganancia (vendido − costo del pedido), % recuperado y en cuántos días se acabó (desde la fecha del pedido).
+- Las piezas que **agregas** con un ajuste no tienen costo y solo se usan cuando ya se acabaron todos tus pedidos de ese producto. Lo que vendas de ellas no suma a ningún corte.
+- Si vendes **más de lo que tienes**, esas piezas llevan un costo estimado (el del siguiente pedido en camino o, si no hay, el del último que recibiste) hasta que recibas el siguiente pedido.
+- Nada de esto se guarda aparte: se calcula con tus pedidos, ventas y ajustes. Si editas o borras algo, los cortes y el costo de las ventas se recalculan solos.
 
 ## Cambiar la contraseña
 

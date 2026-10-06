@@ -16,6 +16,20 @@ function useFormReset(ref, onReset) {
 
 const emptySale = () => ({ key: Math.random(), product_id: '', qty: '1', price: '' });
 
+// Costo PEPS de `qty` piezas de un producto, después de las primeras `skip` que ya se usaron.
+// Las que no alcanzan en inventario llevan el costo estimado del siguiente pedido.
+function fifoCost(p, skip, qty) {
+  let cost = 0;
+  for (const l of p.lots) {
+    const take = Math.min(Math.max(l.units - skip, 0), qty);
+    skip = Math.max(skip - l.units, 0);
+    cost += take * l.cost;
+    qty -= take;
+    if (!qty) return cost;
+  }
+  return cost + qty * p.estimate;
+}
+
 export function SaleLines({ products }) {
   const ref = useRef(null);
   const [rows, setRows] = useState([emptySale()]);
@@ -26,7 +40,15 @@ export function SaleLines({ products }) {
   const set = (i, patch) => setRows((r) => r.map((row, j) => (j === i ? { ...row, ...patch } : row)));
 
   const goods = rows.reduce((a, r) => a + (parseFloat(r.qty) || 0) * (parseFloat(r.price) || 0), 0);
-  const cost = rows.reduce((a, r) => a + (parseFloat(r.qty) || 0) * (byId[r.product_id]?.avg_cost || 0), 0);
+  const used = {};
+  const cost = rows.reduce((a, r) => {
+    const p = byId[r.product_id];
+    const qty = parseInt(r.qty) || 0;
+    if (!p || qty <= 0) return a;
+    const skip = used[r.product_id] ?? 0;
+    used[r.product_id] = skip + qty;
+    return a + fifoCost(p, skip, qty);
+  }, 0);
   const total = goods + (parseFloat(extra.shipping) || 0) - (parseFloat(extra.discount) || 0);
 
   return (
@@ -64,7 +86,7 @@ export function SaleLines({ products }) {
               Precio c/u
               <input name="price" type="number" step="0.01" min="0" inputMode="decimal" placeholder="0.00" value={r.price} onChange={(e) => set(i, { price: e.target.value })} />
             </label>
-            {short && <p className="hint warn span-2">Solo tienes {p.stock} en inventario.</p>}
+            {short && <p className="hint warn span-2">Solo tienes {Math.max(p.stock, 0)} en inventario. El costo de las que faltan es estimado hasta que recibas el siguiente pedido.</p>}
             {rows.length > 1 && (
               <button type="button" className="btn-ghost danger span-2" onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}>
                 Quitar producto

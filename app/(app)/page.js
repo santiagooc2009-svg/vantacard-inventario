@@ -1,10 +1,11 @@
 import Link from 'next/link';
-import { getProducts, getSales, getMonthly, getTotals, getPurchases } from '@/lib/data';
+import { getProducts, getSales, getMonthly, getTotals, getPurchases, getCortes } from '@/lib/data';
 import { mxn, fecha, thisMonth, mes } from '@/lib/format';
+import { CorteProgress, corteTitle, dias } from '@/components/Corte';
 
 export default async function Inicio() {
-  const [products, allSalesList, monthly, totals, purchases] = await Promise.all([
-    getProducts(), getSales({ limit: 1000 }), getMonthly(), getTotals(), getPurchases(),
+  const [products, allSalesList, monthly, totals, purchases, cortes] = await Promise.all([
+    getProducts(), getSales({ limit: 1000 }), getMonthly(), getTotals(), getPurchases(), getCortes(),
   ]);
 
   const sales = allSalesList.slice(0, 5);
@@ -13,7 +14,7 @@ export default async function Inicio() {
 
   const allSales = monthly.reduce((a, r) => a + r.revenue, 0);
   const allCogs = monthly.reduce((a, r) => a + r.cogs, 0);
-  const invValue = products.reduce((a, p) => a + Math.max(p.stock, 0) * p.avg_cost, 0);
+  const invValue = products.reduce((a, p) => a + p.stock_value, 0);
   const invUnits = products.reduce((a, p) => a + Math.max(p.stock, 0), 0);
   const potential = products.reduce((a, p) => a + Math.max(p.stock, 0) * p.sale_price, 0);
   const invested = totals.inventory_spend + totals.expenses;
@@ -22,8 +23,9 @@ export default async function Inicio() {
   const pendingTotal = pending.reduce((a, s) => a + s.total, 0);
 
   const noPrice = products.filter((p) => !p.sale_price && p.stock > 0);
-  const low = products.filter((p) => p.stock <= p.min_stock && p.received > 0);
+  const low = products.filter((p) => p.stock <= p.min_stock && p.received > 0 && !p.unmatched);
   const transit = purchases.filter((p) => p.status === 'en_camino');
+  const oversold = products.filter((p) => p.unmatched > 0);
 
   return (
     <div className="stack-lg">
@@ -69,7 +71,27 @@ export default async function Inicio() {
         </div>
       </section>
 
-      {(noPrice.length > 0 || low.length > 0 || transit.length > 0 || pending.length > 0) && (
+      {cortes.open.length > 0 && (
+        <section className="card">
+          <div className="card-head">
+            <h2>Cortes activos</h2>
+            <Link href="/pedidos" className="link">Ver pedidos</Link>
+          </div>
+          <ul className="list">
+            {cortes.open.map((c) => (
+              <li key={c.id} className="row wrap">
+                <div>
+                  <p className="title">{corteTitle(c)}</p>
+                  <p className="muted small">{c.supplier} · {fecha(c.date)} · lleva {dias(c.days)}</p>
+                </div>
+                <CorteProgress c={c} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {(noPrice.length > 0 || low.length > 0 || transit.length > 0 || pending.length > 0 || oversold.length > 0) && (
         <section className="card">
           <h2>Pendientes</h2>
           <ul className="alerts">
@@ -84,6 +106,13 @@ export default async function Inicio() {
               <li key={p.id}>
                 <Link href="/inventario">
                   <strong>{p.name}</strong>: {p.stock <= 0 ? 'agotado' : `quedan ${p.stock}`}
+                </Link>
+              </li>
+            ))}
+            {oversold.map((p) => (
+              <li key={'o' + p.id}>
+                <Link href="/pedidos">
+                  <strong>{p.name}: salieron {p.unmatched} {p.unmatched === 1 ? 'pieza' : 'piezas'} más de las que tenías.</strong> Su costo es estimado hasta que recibas el siguiente pedido.
                 </Link>
               </li>
             ))}

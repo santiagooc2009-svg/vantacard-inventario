@@ -1,8 +1,9 @@
-import { getProducts, getPurchases } from '@/lib/data';
+import { getProducts, getPurchases, getCortes } from '@/lib/data';
 import { createPurchase, updatePurchase, deletePurchase } from '@/app/actions';
 import { PurchaseLines } from '@/components/LineItems';
 import Submit from '@/components/Submit';
 import ConfirmButton from '@/components/ConfirmButton';
+import { CorteProgress, CorteResult, CorteDetails } from '@/components/Corte';
 import { mxn, fecha, today } from '@/lib/format';
 
 export const metadata = { title: 'Pedidos · Vantacard' };
@@ -13,8 +14,16 @@ const STATUS = {
   cancelado: { label: 'Cancelado / no llegó', cls: 'muted-tag' },
 };
 
+// Un pedido recibido es un corte: abierto mientras le queden piezas, cerrado cuando se acaban.
+const CORTE = {
+  abierto: { label: 'Corte abierto', cls: 'ok' },
+  cerrado: { label: 'Corte cerrado', cls: 'muted-tag' },
+};
+
 export default async function Pedidos() {
-  const [products, purchases] = await Promise.all([getProducts({ includeInactive: true }), getPurchases()]);
+  const [products, purchases, cortes] = await Promise.all([
+    getProducts({ includeInactive: true }), getPurchases(), getCortes(),
+  ]);
   const paid = purchases.reduce((a, p) => a + p.total_paid, 0);
   const refunds = purchases.reduce((a, p) => a + p.refund, 0);
 
@@ -79,11 +88,12 @@ export default async function Pedidos() {
         {purchases.map((p) => {
           const net = p.total_paid - p.refund;
           const units = p.items.reduce((a, i) => a + i.units, 0);
-          const st = STATUS[p.status] ?? STATUS.en_camino;
+          const corte = cortes.byPurchase[p.id];
+          const st = corte ? (corte.closed ? CORTE.cerrado : CORTE.abierto) : STATUS[p.status] ?? STATUS.en_camino;
           return (
             <li key={p.id} className="card">
               <details className="item">
-                <summary className="row">
+                <summary className="row wrap">
                   <div>
                     <p className="title">{p.supplier} <span className={'tag ' + st.cls}>{st.label}</span></p>
                     <p className="muted small">
@@ -95,16 +105,26 @@ export default async function Pedidos() {
                     {p.refund > 0 && <p className="small pos">−{mxn(p.refund)} reemb.</p>}
                     {p.status !== 'cancelado' && units > 0 && <p className="muted small">{mxn(net / units)} c/u</p>}
                   </div>
+                  {corte && (corte.closed ? <CorteResult c={corte} /> : <CorteProgress c={corte} />)}
                 </summary>
                 <div className="item-body">
+                  {corte && <CorteDetails c={corte} />}
+                  {p.status === 'en_camino' && <p className="muted small">Su corte empieza cuando lo marques como recibido.</p>}
                   {p.notes && <p className="muted small">{p.notes}</p>}
                   {p.order_number && <p className="muted small">Pedido #{p.order_number}</p>}
                   {p.items.length > 1 && (
                     <table className="mini">
                       <tbody>
-                        {p.items.map((i) => (
-                          <tr key={i.id}><td>{i.units}× {i.name}</td><td>{mxn(i.cost / i.units)} c/u</td></tr>
-                        ))}
+                        {p.items.map((i) => {
+                          const ci = corte?.items.find((x) => x.id === i.id);
+                          return (
+                            <tr key={i.id}>
+                              <td>{i.units}× {i.name}</td>
+                              <td className="nowrap">{mxn(i.cost / i.units)} c/u</td>
+                              {ci && <td className="muted nowrap">quedan {ci.units - ci.sold - ci.lost}</td>}
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   )}

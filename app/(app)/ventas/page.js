@@ -1,4 +1,4 @@
-import { getProducts, getSales } from '@/lib/data';
+import { getProducts, getSales, getCortes } from '@/lib/data';
 import { createSale, deleteSale, toggleSaleStatus } from '@/app/actions';
 import { SaleLines } from '@/components/LineItems';
 import Submit from '@/components/Submit';
@@ -11,7 +11,7 @@ const CHANNELS = ['Instagram', 'WhatsApp', 'Facebook', 'Mercado Libre', 'TikTok'
 const PAYMENTS = ['Transferencia', 'Efectivo', 'Tarjeta', 'Mercado Pago', 'Otro'];
 
 export default async function Ventas() {
-  const [products, sales] = await Promise.all([getProducts(), getSales()]);
+  const [products, sales, { estimated }] = await Promise.all([getProducts(), getSales(), getCortes()]);
   const forSale = products.filter((p) => p.received > 0 || p.stock > 0);
 
   return (
@@ -90,7 +90,7 @@ export default async function Ventas() {
                           <tr key={k}>
                             <td>{i.qty}× {i.name}</td>
                             <td>{mxn(i.unit_price)} c/u</td>
-                            <td className="muted">costo {mxn(i.unit_cost)}</td>
+                            <td className="muted">{estimated.has(i.id) ? 'costo estimado' : 'costo'} {mxn(i.unit_cost)}</td>
                           </tr>
                         ))}
                         {s.shipping_charged > 0 && <tr><td>Envío cobrado</td><td>{mxn(s.shipping_charged)}</td><td /></tr>}

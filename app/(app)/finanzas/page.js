@@ -1,15 +1,18 @@
-import { getMonthly, getExpenses, getProducts } from '@/lib/data';
+import { getMonthly, getExpenses, getProducts, getCortes } from '@/lib/data';
 import { createExpense, deleteExpense } from '@/app/actions';
 import Submit from '@/components/Submit';
 import ConfirmButton from '@/components/ConfirmButton';
 import { mxn, mes, fecha, today, pct } from '@/lib/format';
+import { corteTitle, dias, plural } from '@/components/Corte';
 
 export const metadata = { title: 'Finanzas · Vantacard' };
 
 const CATEGORIES = ['Envíos a clientes', 'Empaque', 'Publicidad', 'Diseño / impresión', 'Herramientas', 'Comisiones', 'Otros'];
 
 export default async function Finanzas() {
-  const [monthly, expenses, products] = await Promise.all([getMonthly(), getExpenses(), getProducts({ includeInactive: true })]);
+  const [monthly, expenses, products, cortes] = await Promise.all([
+    getMonthly(), getExpenses(), getProducts({ includeInactive: true }), getCortes(),
+  ]);
 
   const t = monthly.reduce(
     (a, r) => ({
@@ -21,6 +24,12 @@ export default async function Finanzas() {
   const profit = t.revenue - t.cogs - t.expenses;
   const cash = t.revenue - t.spend - t.expenses;
   const sold = products.filter((p) => p.sold > 0).sort((a, b) => b.revenue - b.cogs - (a.revenue - a.cogs));
+
+  const closed = cortes.closed;
+  const ct = closed.reduce(
+    (a, c) => ({ cost: a.cost + c.cost, revenue: a.revenue + c.revenue, days: a.days + c.days, sold: a.sold + c.sold, lost: a.lost + c.lost }),
+    { cost: 0, revenue: 0, days: 0, sold: 0, lost: 0 }
+  );
 
   return (
     <div className="stack-lg">
@@ -66,6 +75,48 @@ export default async function Finanzas() {
         )}
         <p className="hint">
           La utilidad solo cuenta el costo de las piezas que ya vendiste. Lo que compraste y sigue en inventario no es pérdida: es mercancía.
+        </p>
+      </section>
+
+      <section className="card">
+        <h2>Cortes cerrados</h2>
+        {closed.length === 0 ? (
+          <p className="muted">
+            Todavía no se acaba ningún pedido. Cada pedido recibido es un corte y se cierra solo cuando vendes o das de baja todas sus piezas.
+          </p>
+        ) : (
+          <div className="stack">
+            <div className="month">
+              <dl className="facts">
+                <dt>{closed.length === 1 ? '1 corte cerrado' : `${closed.length} cortes cerrados`}</dt><dd>{plural(ct.sold, 'vendida')}{ct.lost > 0 ? ` · ${plural(ct.lost, 'perdida')}` : ''}</dd>
+                <dt>Te costaron</dt><dd>{mxn(ct.cost)}</dd>
+                <dt>Vendiste</dt><dd>{mxn(ct.revenue)}</dd>
+                <dt>Ganancia</dt><dd className={ct.revenue - ct.cost >= 0 ? 'pos' : 'neg'}><strong>{mxn(ct.revenue - ct.cost)}</strong></dd>
+                <dt>Recuperado</dt><dd>{ct.cost > 0 ? pct(ct.revenue / ct.cost) : '—'}</dd>
+                <dt>Se acaban en promedio en</dt><dd>{dias(Math.round(ct.days / closed.length))}</dd>
+              </dl>
+            </div>
+            <ul className="list compact">
+              {closed.map((c) => (
+                <li key={c.id} className="row">
+                  <div>
+                    <p className="title">{corteTitle(c)}</p>
+                    <p className="muted small">
+                      {fecha(c.date)} → {fecha(c.endedOn)} · {dias(c.days)} · {plural(c.sold, 'vendida')}{c.lost > 0 ? ` · ${plural(c.lost, 'perdida')}` : ''}
+                    </p>
+                    <p className="muted small">Costó {mxn(c.cost)} · vendiste {mxn(c.revenue)}</p>
+                  </div>
+                  <div className="right">
+                    <p className={'title ' + (c.profit >= 0 ? 'pos' : 'neg')}>{mxn(c.profit)}</p>
+                    {c.recovered != null && <p className="muted small">{pct(c.recovered)} recuperado</p>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <p className="hint">
+          Ganancia de un corte = lo que vendiste de sus piezas (con envío y descuento) − lo que pagaste por el pedido. Las piezas perdidas ya van dentro de ese costo.
         </p>
       </section>
 
