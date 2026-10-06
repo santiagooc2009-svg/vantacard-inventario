@@ -6,7 +6,7 @@ import ConfirmButton from '@/components/ConfirmButton';
 import StackBar from '@/components/StackBar';
 import { Gauge, Legend, Delta } from '@/components/Viz';
 import { corteTitle, dias, plural } from '@/components/Corte';
-import { mxn, mes, mesCorto, mesAnterior, fecha, today, thisMonth, pct } from '@/lib/format';
+import { mxn, mes, mesCorto, mesAnterior, mesDe, fecha, today, thisMonth, pct } from '@/lib/format';
 
 export const metadata = { title: 'Finanzas · Vantacard' };
 
@@ -30,7 +30,7 @@ export default async function Finanzas({ searchParams }) {
   const current = thisMonth();
   const months = [...new Set([current, ...monthly.map((r) => r.month)])].sort().reverse();
   const period = mesParam === 'todo' ? null : months.includes(mesParam) ? mesParam : current;
-  const inPeriod = (date) => !period || (date ?? '').startsWith(period);
+  const inPeriod = (date) => !period || mesDe(date) === period;
   const isCurrent = period === current;
 
   const t = monthly.filter((r) => inPeriod(r.month)).reduce(addMonth, ZERO);
@@ -47,14 +47,12 @@ export default async function Finanzas({ searchParams }) {
   const pSales = sales.filter((s) => inPeriod(s.date));
   const pending = pSales.filter((s) => s.status === 'pendiente');
 
-  // Punto de equilibrio operativo: lo que necesitas vender para que la ganancia de lo vendido
-  // (ventas − costo de las piezas) cubra tus gastos. Si no hay ventas en el periodo usa tu margen histórico.
-  const allMargin = all.revenue > 0 ? (all.revenue - all.cogs) / all.revenue : null;
-  const peMargin = margin ?? allMargin;
-  const breakEven = t.expenses === 0 ? 0 : peMargin > 0 ? t.expenses / peMargin : null;
-  const perPiece = t.units > 0 ? gross / t.units : all.units > 0 ? (all.revenue - all.cogs) / all.units : 0;
-  const toCover = Math.max(t.expenses - gross, 0);
-  const piecesNeeded = toCover > 0 && perPiece > 0 ? Math.ceil(toCover / perPiece) : 0;
+  // Punto de equilibrio: lo que necesitas vender para recuperar tus gastos y lo que invertiste
+  // en mercancía en el periodo. Las piezas que faltan se calculan a tu precio promedio por pieza.
+  const breakEven = t.expenses + t.spend;
+  const pricePerPiece = t.units > 0 ? t.revenue / t.units : all.units > 0 ? all.revenue / all.units : 0;
+  const shortfall = Math.max(breakEven - t.revenue, 0);
+  const piecesNeeded = shortfall > 0 && pricePerPiece > 0 ? Math.ceil(shortfall / pricePerPiece) : 0;
 
   // Ritmo del mes actual
   const [py, pm] = (period ?? current).split('-').map(Number);
@@ -62,8 +60,6 @@ export default async function Finanzas({ searchParams }) {
   const dayNow = Number(today().slice(8, 10));
   const daysLeft = daysInMonth - dayNow + 1;
   const projection = isCurrent ? (t.revenue / dayNow) * daysInMonth : null;
-
-  const invested = all.spend + all.expenses;
 
   // Inventario de hoy
   const stocked = products.filter((p) => p.stock > 0);
@@ -191,16 +187,12 @@ export default async function Finanzas({ searchParams }) {
 
       <section className="card">
         <h2>Metas y equilibrio</h2>
-        <p className="card-sub">{period ? 'Cómo vas este mes contra tus gastos y tu meta.' : 'Cómo vas contra tus gastos y lo que has invertido desde el inicio.'}</p>
+        <p className="card-sub">{period ? 'Cómo vas este mes contra lo que gastaste e invertiste, y contra tu meta.' : 'Cómo vas contra todo lo que has gastado e invertido desde el inicio.'}</p>
         <div className="gauges">
           <div className="gauge-card">
-            <p className="title">Punto de equilibrio operativo</p>
+            <p className="title">Punto de equilibrio</p>
             {breakEven === 0 ? (
-              <p className="muted small">
-                No hay gastos registrados {period ? 'este mes' : 'todavía'}: todo lo que ganas en tus ventas ya es utilidad. Registra tus gastos (envíos, empaque, anuncios) para calcularlo.
-              </p>
-            ) : breakEven == null ? (
-              <p className="muted small">Todavía no hay ventas con ganancia para calcular cuánto necesitas vender.</p>
+              <p className="muted small">No hay gastos ni compras de mercancía {period ? 'este mes' : 'todavía'}: no tienes nada que recuperar.</p>
             ) : (
               <>
                 <Gauge
@@ -209,14 +201,14 @@ export default async function Finanzas({ searchParams }) {
                 />
                 <p className="gauge-value">{pct(t.revenue / breakEven)}</p>
                 <p className="gauge-caption">del equilibrio ({mxn(breakEven)} en ventas)</p>
-                {toCover === 0 ? (
-                  <p className="gauge-text"><strong className="pos">✓ Ya cubriste tus gastos.</strong> Vas {mxn(t.revenue - breakEven)} arriba del equilibrio.</p>
+                {shortfall === 0 ? (
+                  <p className="gauge-text"><strong className="pos">✓ Ya recuperaste tus gastos y tu inversión.</strong> Vas {mxn(t.revenue - breakEven)} arriba del equilibrio.</p>
                 ) : (
                   <p className="gauge-text">
-                    Te faltan <strong>{mxn(breakEven - t.revenue)}</strong> en ventas{piecesNeeded > 0 ? ` (unas ${plural(piecesNeeded, 'pieza')})` : ''} para cubrir {mxn(t.expenses)} de gastos.
+                    Te faltan <strong>{mxn(shortfall)}</strong> en ventas{piecesNeeded > 0 ? ` (unas ${plural(piecesNeeded, 'pieza')} a tu precio promedio)` : ''} para recuperar lo que gastaste e invertiste.
                   </p>
                 )}
-                <p className="hint">Equilibrio = gastos {mxn(t.expenses)} ÷ margen bruto {pct(peMargin)}{margin == null ? ' (histórico)' : ''}.</p>
+                <p className="hint">Equilibrio = gastos {mxn(t.expenses)} + compras de mercancía {mxn(t.spend)}.</p>
               </>
             )}
           </div>
@@ -251,18 +243,6 @@ export default async function Finanzas({ searchParams }) {
                   <p className="muted small">Ponte una meta de ventas al mes y aquí verás cuánto llevas, cuánto te falta por día y en cuánto vas a cerrar.</p>
                   <GoalForm />
                 </>
-              )}
-            </div>
-          ) : invested > 0 ? (
-            <div className="gauge-card">
-              <p className="title">Recuperación de lo invertido</p>
-              <Gauge value={all.revenue} max={invested} label={`Ventas ${mxn(all.revenue)} de ${mxn(invested)} invertidos`} />
-              <p className="gauge-value">{pct(all.revenue / invested)}</p>
-              <p className="gauge-caption">{mxn(all.revenue)} vendidos de {mxn(invested)} invertidos</p>
-              {all.revenue >= invested ? (
-                <p className="gauge-text"><strong className="pos">✓ Ya recuperaste todo lo invertido</strong> y llevas {mxn(all.revenue - invested)} encima.</p>
-              ) : (
-                <p className="gauge-text">Te faltan <strong>{mxn(invested - all.revenue)}</strong> en ventas para recuperar lo que has puesto en mercancía y gastos.</p>
               )}
             </div>
           ) : null}
