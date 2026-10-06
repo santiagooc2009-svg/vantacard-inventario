@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { getProducts, getSales, getMonthly, getTotals, getPurchases, getGoal, getRetiro } from '@/lib/data';
-import { mxn, fecha, thisMonth, mes, mesDe, mesesEntre, INICIO, today, pct } from '@/lib/format';
+import { mxn, fecha, thisMonth, mes, mesDe, mesesEntre, INICIO, today, pct, diaEntrega } from '@/lib/format';
 import { plural, dias } from '@/components/Corte';
 import StackBar from '@/components/StackBar';
 
@@ -15,9 +15,12 @@ const sumBy = (list, f) => list.reduce((a, x) => a + f(x), 0);
 const decimal = (n) => n.toLocaleString('es-MX', { maximumFractionDigits: 1 });
 
 export default async function Inicio() {
-  const [products, allSales, monthly, totals, purchases, goal, retiro] = await Promise.all([
+  const [products, salesList, monthly, totals, purchases, goal, retiro] = await Promise.all([
     getProducts(), getSales({ limit: 100000 }), getMonthly(), getTotals(), getPurchases(), getGoal(), getRetiro(),
   ]);
+  // Solo las entregadas cuentan como venta; las por entregar van aparte en Pendientes.
+  const allSales = salesList.filter((s) => s.delivered);
+  const toDeliver = salesList.filter((s) => !s.delivered).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
   const month = thisMonth();
   const m = monthly.find((r) => r.month === month) ?? { revenue: 0, cogs: 0, expenses: 0, units: 0, inventory_spend: 0 };
@@ -66,7 +69,7 @@ export default async function Inicio() {
   const oversold = products.filter((p) => p.unmatched > 0);
   const low = products.filter((p) => p.stock <= p.min_stock && p.received > 0 && !p.unmatched);
   const noPrice = products.filter((p) => !p.sale_price && p.stock > 0);
-  const todoCount = pending.length + transit.length + oversold.length + low.length + noPrice.length;
+  const todoCount = toDeliver.length + pending.length + transit.length + oversold.length + low.length + noPrice.length;
 
   const recent = allSales.slice(0, 8);
 
@@ -135,9 +138,29 @@ export default async function Inicio() {
           {todoCount > 0 && <span className="count-pill">{todoCount}</span>}
         </div>
         {todoCount === 0 ? (
-          <p className="muted">✓ Todo al día: nada por cobrar, sin pedidos en camino y con existencias.</p>
+          <p className="muted">✓ Todo al día: nada por entregar ni por cobrar, sin pedidos en camino y con existencias.</p>
         ) : (
           <div className="todo">
+            {toDeliver.length > 0 && (
+              <div className="todo-group">
+                <p className="todo-title">
+                  <span>Por entregar <strong>{mxn(sumBy(toDeliver, (s) => s.total))}</strong></span>
+                  <Link href="/ventas" className="link small">Entregar</Link>
+                </p>
+                <ul>
+                  {toDeliver.map((s) => (
+                    <li key={s.id}>
+                      <span>
+                        {s.customer || 'Cliente'} <span className="muted">· {s.items.map((i) => `${i.qty}× ${i.name}`).join(', ')}</span>
+                      </span>
+                      <span className={'nowrap ' + (s.date < todayStr ? 'neg' : s.date === todayStr ? 'warn' : 'muted')}>
+                        {s.date < todayStr ? `atrasada (${diaEntrega(s.date)})` : diaEntrega(s.date)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {pending.length > 0 && (
               <div className="todo-group">
                 <p className="todo-title">

@@ -13,12 +13,14 @@ export function CorteProgress({ c }) {
       <div className="corte-line">
         <span>
           Vendidas <strong>{c.sold} de {c.units}</strong>
+          {c.reserved > 0 && <> · <span className="warn">{plural(c.reserved, 'apartada')}</span></>}
           {c.lost > 0 && <> · <span className="neg">{plural(c.lost, 'perdida')}</span></>}
         </span>
         <span className="muted">quedan {c.left}</span>
       </div>
       <div className="bar" aria-hidden="true">
         <span className="bar-sold" style={{ width: width(c.sold / c.units) }} />
+        {c.reserved > 0 && <span className="bar-held" style={{ width: width(c.reserved / c.units) }} />}
         <span className="bar-lost" style={{ width: width(c.lost / c.units) }} />
       </div>
       <div className="corte-line">
@@ -49,7 +51,7 @@ export function CorteDetails({ c }) {
     <dl className="facts">
       <dt>Costo del pedido</dt><dd>{mxn(c.cost)}</dd>
       <dt>Piezas</dt>
-      <dd>{plural(c.sold, 'vendida')} · {plural(c.lost, 'perdida')} · quedan {c.left}</dd>
+      <dd>{plural(c.sold, 'vendida')}{c.reserved > 0 ? ` · ${plural(c.reserved, 'apartada')}` : ''} · {plural(c.lost, 'perdida')} · quedan {c.left}</dd>
       <dt>Vendiste</dt><dd>{mxn(c.revenue)}</dd>
       {!c.closed && short > 0 ? (
         <><dt>Falta por recuperar</dt><dd>{mxn(short)}</dd></>

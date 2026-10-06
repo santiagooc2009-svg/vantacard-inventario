@@ -50,7 +50,9 @@ export default async function Finanzas({ searchParams }) {
   const prev = prevRow ? addMonth(ZERO, prevRow) : null;
   const prevName = prevKey ? mesCorto(prevKey).split(' ')[0] : '';
 
-  const pSales = sales.filter((s) => inPeriod(s.date));
+  // Solo las ventas entregadas cuentan; las por entregar se muestran aparte junto a la meta.
+  const pSales = sales.filter((s) => s.delivered && inPeriod(s.date));
+  const toDeliverTotal = sales.filter((s) => !s.delivered && inPeriod(s.date)).reduce((a, s) => a + s.total, 0);
   const pending = pSales.filter((s) => s.status === 'pendiente');
 
   // Punto de equilibrio: lo que necesitas vender para recuperar tus gastos y lo que invertiste
@@ -77,7 +79,7 @@ export default async function Finanzas({ searchParams }) {
   const cutoff = new Date(today() + 'T00:00:00Z');
   cutoff.setUTCDate(cutoff.getUTCDate() - 29);
   const since = cutoff.toISOString().slice(0, 10);
-  const sold30 = sumBy(sales.filter((s) => s.date >= since), (s) => sumBy(s.items, (i) => i.qty));
+  const sold30 = sumBy(sales.filter((s) => s.delivered && s.date >= since), (s) => sumBy(s.items, (i) => i.qty));
   const coverDays = sold30 > 0 ? Math.round(invUnits / (sold30 / 30)) : null;
   const openShort = sumBy(cortes.open, (c) => Math.max(c.cost - c.revenue, 0));
 
@@ -239,6 +241,9 @@ export default async function Finanzas({ searchParams }) {
                   )}
                   {isCurrent && t.revenue > 0 && (
                     <p className="hint">A este ritmo cierras el mes en {mxn(projection)} ({pct(projection / goal)} de la meta).</p>
+                  )}
+                  {toDeliverTotal > 0 && t.revenue < goal && (
+                    <p className="hint">Con lo que tienes por entregar ({mxn(toDeliverTotal)}) llegarías al {pct((t.revenue + toDeliverTotal) / goal)}.</p>
                   )}
                   <details>
                     <summary className="link small">Cambiar meta</summary>

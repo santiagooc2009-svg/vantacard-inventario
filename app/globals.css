@@ -204,6 +204,10 @@ li.card .item-body { padding: 14px 0 0; }
 .tag.info { background: var(--info-soft); color: var(--info); }
 .tag.ok { background: var(--accent-soft); color: var(--pos); }
 .tag.muted-tag { background: var(--surface-2); color: var(--ink-2); }
+.tag.neg-tag { background: color-mix(in srgb, var(--neg) 14%, var(--surface)); color: var(--neg); }
+.deliver-form { display: flex; gap: 8px; align-items: flex-end; padding: 10px; border-radius: 12px; background: var(--surface-2); }
+.deliver-form label { flex: 1; }
+.deliver-form input { background: var(--surface); }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 table.mini { width: 100%; border-collapse: collapse; font-size: .85rem; }
@@ -243,6 +247,7 @@ table.mini td + td { text-align: right; padding-left: 8px; }
 .bar { display: flex; height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; margin-bottom: 4px; }
 .bar-sold { background: var(--info); }
 .bar-lost { background: var(--neg); }
+.bar-held { background: color-mix(in srgb, var(--info) 40%, var(--surface)); }
 .bar-money { background: var(--pos); }
 dl.facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: .88rem; }
 dl.facts dt { color: var(--ink-2); }

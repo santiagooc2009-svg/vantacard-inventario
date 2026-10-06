@@ -188,6 +188,7 @@ function ProductCard({ p }) {
           <p className="muted small">
             {p.sku ? p.sku + ' · ' : ''}Costo real {mxn(p.unit_cost)} c/u
             {p.in_transit > 0 && <> · <span className="info">{p.in_transit} en camino</span></>}
+            {p.reserved > 0 && <> · <span className="warn">{p.reserved} apartadas</span></>}
           </p>
         </div>
         <div className={'stock' + (p.stock <= 0 ? ' out' : low ? ' low' : '')}>
@@ -245,7 +246,7 @@ function ProductCard({ p }) {
             <input name="notes" defaultValue={p.notes ?? ''} />
           </label>
           <p className="muted small">
-            Recibidas {p.received} · vendidas {p.sold} · ajustes {p.adjusted > 0 ? '+' : ''}{p.adjusted}
+            Recibidas {p.received} · vendidas {p.sold}{p.reserved > 0 ? ` · apartadas ${p.reserved}` : ''} · ajustes {p.adjusted > 0 ? '+' : ''}{p.adjusted}
           </p>
           <Submit close>Guardar cambios</Submit>
         </form>

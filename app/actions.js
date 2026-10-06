@@ -179,18 +179,31 @@ export async function createSale(formData) {
   }
   if (!lines.length) return;
 
+  // Por entregar: aparta las piezas, pero cuenta como venta hasta que se marca entregada.
+  // Una venta con fecha futura siempre queda por entregar.
+  const date = dateOr(formData.get('date'));
+  const delivered = formData.get('delivery') !== 'por_entregar' && date <= today();
+
   const sale = await one(
-    `insert into sales (date, customer, channel, payment_method, shipping_charged, discount, status, notes)
-     values ($1,$2,$3,$4,$5,$6,$7,$8) returning id`,
-    [dateOr(formData.get('date')), txt(formData.get('customer')), txt(formData.get('channel')),
+    `insert into sales (date, customer, channel, payment_method, shipping_charged, discount, status, notes, delivered)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id`,
+    [date, txt(formData.get('customer')), txt(formData.get('channel')),
      txt(formData.get('payment_method')), num(formData.get('shipping_charged')), num(formData.get('discount')),
-     formData.get('status') === 'pendiente' ? 'pendiente' : 'pagada', txt(formData.get('notes'))]
+     formData.get('status') === 'pendiente' ? 'pendiente' : 'pagada', txt(formData.get('notes')), delivered]
   );
   // El costo de cada pieza lo pone refreshCosts() con PEPS, según el corte que se está gastando.
   for (const l of lines) {
     await q(`insert into sale_items (sale_id, product_id, qty, unit_price) values ($1,$2,$3,$4)`,
       [sale.id, l.productId, l.qty, l.price]);
   }
+  await refreshCosts();
+}
+
+// Entregada: desde ese día cuenta como venta (la fecha pasa a ser la de la entrega).
+export async function markDelivered(formData) {
+  await ensureSchema();
+  await q(`update sales set delivered = true, date = $2 where id = $1`,
+    [int(formData.get('id')), dateOr(formData.get('date'))]);
   await refreshCosts();
 }
 
