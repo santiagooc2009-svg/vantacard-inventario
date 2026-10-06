@@ -187,7 +187,7 @@ function ProductCard({ p }) {
           <p className="muted small">
             Recibidas {p.received} · vendidas {p.sold} · ajustes {p.adjusted > 0 ? '+' : ''}{p.adjusted}
           </p>
-          <Submit>Guardar cambios</Submit>
+          <Submit close>Guardar cambios</Submit>
         </form>
       </details>
     </li>

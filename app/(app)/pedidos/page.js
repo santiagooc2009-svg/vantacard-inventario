@@ -157,7 +157,7 @@ export default async function Pedidos() {
                       <input name="notes" defaultValue={p.notes ?? ''} />
                     </label>
                     <div className="actions">
-                      <Submit className="btn small">Guardar</Submit>
+                      <Submit className="btn small" close>Guardar</Submit>
                     </div>
                   </form>
                   <form action={deletePurchase} className="actions">
