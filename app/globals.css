@@ -254,6 +254,9 @@ dl.facts dd { margin: 0; text-align: right; }
   background: var(--surface); font-size: .85rem; font-weight: 700; color: var(--ink-2); white-space: nowrap;
 }
 .chip.on { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.chip-count { margin-left: 2px; font-weight: 600; opacity: .6; }
+.chips.wrap { flex-wrap: wrap; overflow: visible; margin: 0; padding: 0; }
+.filters { display: flex; flex-direction: column; gap: 8px; }
 
 /* Finanzas: encabezado */
 .hero { --c-cost: #5b5f68; --c-exp: #d95926; --c-profit: #199e70; --c-in: #3987e5; }

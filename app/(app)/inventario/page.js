@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { getProducts, getAdjustments } from '@/lib/data';
 import { createProduct, updateProduct, adjustStock, deleteAdjustment } from '@/app/actions';
 import Submit from '@/components/Submit';
@@ -6,23 +7,82 @@ import { mxn, pct, fecha, today } from '@/lib/format';
 
 export const metadata = { title: 'Inventario · Vantacard' };
 
-export default async function Inventario() {
+// Filtros que salen del nombre del producto: si dice "Tarjeta" es tarjeta, si dice "Google" es de Google.
+// Solo aparecen los que tienen al menos un producto.
+const TIPOS = [
+  { key: 'tarjetas', label: 'Tarjetas', re: /tarjeta/i },
+  { key: 'placas', label: 'Placas', re: /placa/i },
+  { key: 'llaveros', label: 'Llaveros', re: /llavero/i },
+  { key: 'stickers', label: 'Stickers', re: /sticker|calcoman/i },
+];
+const REDES = [
+  { key: 'instagram', label: 'Instagram', re: /instagram/i },
+  { key: 'google', label: 'Google', re: /google/i },
+  { key: 'tiktok', label: 'TikTok', re: /tik ?tok/i },
+  { key: 'facebook', label: 'Facebook', re: /facebook/i },
+  { key: 'whatsapp', label: 'WhatsApp', re: /whats ?app/i },
+];
+
+export default async function Inventario({ searchParams }) {
+  const { tipo, red } = await searchParams;
   const [products, adjustments] = await Promise.all([getProducts({ includeInactive: true }), getAdjustments()]);
   const active = products.filter((p) => p.active);
   const archived = products.filter((p) => !p.active);
-  const value = active.reduce((a, p) => a + p.stock_value, 0);
-  const units = active.reduce((a, p) => a + Math.max(p.stock, 0), 0);
+
+  const tipoF = TIPOS.find((t) => t.key === tipo);
+  const redF = REDES.find((r) => r.key === red);
+  const matches = (p, t = tipoF, r = redF) => (!t || t.re.test(p.name)) && (!r || r.re.test(p.name));
+  const href = ({ tipo: t = tipoF?.key, red: r = redF?.key }) => {
+    const qs = new URLSearchParams();
+    if (t) qs.set('tipo', t);
+    if (r) qs.set('red', r);
+    return qs.size ? `/inventario?${qs}` : '/inventario';
+  };
+  const chips = (list, current, param) =>
+    list
+      .filter((f) => active.some((p) => f.re.test(p.name)))
+      .map((f) => {
+        const on = current === f;
+        const count = active.filter((p) => (param === 'tipo' ? matches(p, f, redF) : matches(p, tipoF, f))).length;
+        return (
+          <Link key={f.key} href={href({ [param]: on ? null : f.key })} scroll={false} className={'chip' + (on ? ' on' : '')} aria-current={on || undefined}>
+            {f.label} <span className="chip-count">{count}</span>
+          </Link>
+        );
+      });
+
+  const shown = active.filter((p) => matches(p));
+  const shownArchived = archived.filter((p) => matches(p));
+  const value = shown.reduce((a, p) => a + p.stock_value, 0);
+  const units = shown.reduce((a, p) => a + Math.max(p.stock, 0), 0);
+  const filterName = [tipoF?.label, redF?.label].filter(Boolean).join(' de ');
 
   return (
     <div className="stack-lg">
       <div className="page-head">
         <h1>Inventario</h1>
-        <p className="muted">{units} piezas · costo {mxn(value)}</p>
+        <p className="muted">{filterName ? `${filterName}: ` : ''}{units} piezas · costo {mxn(value)}</p>
       </div>
 
-      <ul className="products">
-        {active.map((p) => <ProductCard key={p.id} p={p} />)}
-      </ul>
+      <div className="filters">
+        <nav className="chips wrap" aria-label="Filtrar por tipo">
+          <Link href="/inventario" scroll={false} className={'chip' + (!tipoF && !redF ? ' on' : '')}>
+            Todos <span className="chip-count">{active.length}</span>
+          </Link>
+          {chips(TIPOS, tipoF, 'tipo')}
+        </nav>
+        <nav className="chips wrap" aria-label="Filtrar por red">
+          {chips(REDES, redF, 'red')}
+        </nav>
+      </div>
+
+      {shown.length === 0 ? (
+        <p className="muted">Ningún producto activo coincide con este filtro. <Link href="/inventario" className="link">Ver todos</Link></p>
+      ) : (
+        <ul className="products">
+          {shown.map((p) => <ProductCard key={p.id} p={p} />)}
+        </ul>
+      )}
 
       <details className="card">
         <summary><h2>Ajustar existencias</h2></summary>
@@ -105,11 +165,11 @@ export default async function Inventario() {
         </form>
       </details>
 
-      {archived.length > 0 && (
+      {shownArchived.length > 0 && (
         <details className="card">
-          <summary><h2>Archivados ({archived.length})</h2></summary>
+          <summary><h2>Archivados ({shownArchived.length})</h2></summary>
           <ul className="products">
-            {archived.map((p) => <ProductCard key={p.id} p={p} />)}
+            {shownArchived.map((p) => <ProductCard key={p.id} p={p} />)}
           </ul>
         </details>
       )}
