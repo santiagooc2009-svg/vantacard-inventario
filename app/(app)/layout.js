@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import Nav from '@/components/Nav';
 import { logout } from '@/app/actions';
 
@@ -14,9 +15,12 @@ export default function AppLayout({ children }) {
           Vantacard
         </div>
         <Nav />
-        <form action={logout}>
-          <button className="btn-ghost small" type="submit">Salir</button>
-        </form>
+        <div className="top-actions">
+          <Link href="/cuenta" className="btn-ghost small">Cuenta</Link>
+          <form action={logout}>
+            <button className="btn-ghost small" type="submit">Salir</button>
+          </form>
+        </div>
       </header>
       <main className="main">{children}</main>
     </div>

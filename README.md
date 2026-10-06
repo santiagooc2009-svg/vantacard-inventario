@@ -47,6 +47,10 @@ Ya trae precargados tus 6 pedidos de septiembre 2026 (5 de AliExpress y 1 de Ali
 - Si vendes **más de lo que tienes**, esas piezas llevan un costo estimado (el del siguiente pedido en camino o, si no hay, el del último que recibiste) hasta que recibas el siguiente pedido.
 - Nada de esto se guarda aparte: se calcula con tus pedidos, ventas y ajustes. Si editas o borras algo, los cortes y el costo de las ventas se recalculan solos.
 
+## Entrar con Face ID
+
+Entra una vez con tu contraseña, ve a **Cuenta** (arriba a la derecha) y toca **Activar Face ID en este dispositivo**. La llave (passkey) se guarda en tu llavero de iCloud, así que también sirve en tus otros dispositivos Apple. Desde ahí la pantalla de entrada muestra **Entrar con Face ID**; la contraseña sigue funcionando de respaldo. Las passkeys quedan ligadas al dominio: si cambias de dominio, actívalo otra vez.
+
 ## Cambiar la contraseña
 
 Cambia `APP_PASSWORD` en Vercel y haz Redeploy. Todas las sesiones abiertas se cierran.

@@ -1,8 +1,22 @@
 import LoginForm from './LoginForm';
+import { PasskeyLogin } from '@/components/PasskeyButton';
+import { one } from '@/lib/db';
+import { ensureSchema } from '@/lib/schema';
 
 export const metadata = { title: 'Entrar · Vantacard' };
+export const dynamic = 'force-dynamic';
 
-export default function LoginPage() {
+async function hasPasskeys() {
+  try {
+    await ensureSchema();
+    return (await one(`select count(*)::int as n from passkeys`)).n > 0;
+  } catch {
+    return false;
+  }
+}
+
+export default async function LoginPage() {
+  const faceId = await hasPasskeys();
   return (
     <main className="login">
       <div className="card login-card">
@@ -13,7 +27,13 @@ export default function LoginPage() {
           Vantacard
         </div>
         <p className="muted">Pedidos, inventario, ventas y finanzas.</p>
-        <LoginForm />
+        {faceId && (
+          <>
+            <PasskeyLogin />
+            <p className="divider"><span>o con tu contraseña</span></p>
+          </>
+        )}
+        <LoginForm autoFocus={!faceId} secondary={faceId} />
       </div>
     </main>
   );

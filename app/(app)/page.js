@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getProducts, getSales, getMonthly, getTotals, getPurchases, getGoal, getRetiro } from '@/lib/data';
+import { getProducts, getSales, getMonthly, getTotals, getPurchases, getGoal, getRetiro, getPasskeyCount } from '@/lib/data';
 import { mxn, fecha, thisMonth, mes, mesDe, mesesEntre, INICIO, today, pct, diaEntrega } from '@/lib/format';
 import { plural, dias } from '@/components/Corte';
 import StackBar from '@/components/StackBar';
@@ -15,8 +15,8 @@ const sumBy = (list, f) => list.reduce((a, x) => a + f(x), 0);
 const decimal = (n) => n.toLocaleString('es-MX', { maximumFractionDigits: 1 });
 
 export default async function Inicio() {
-  const [products, salesList, monthly, totals, purchases, goal, retiro] = await Promise.all([
-    getProducts(), getSales({ limit: 100000 }), getMonthly(), getTotals(), getPurchases(), getGoal(), getRetiro(),
+  const [products, salesList, monthly, totals, purchases, goal, retiro, passkeys] = await Promise.all([
+    getProducts(), getSales({ limit: 100000 }), getMonthly(), getTotals(), getPurchases(), getGoal(), getRetiro(), getPasskeyCount(),
   ]);
   // Solo las entregadas cuentan como venta; las por entregar van aparte en Pendientes.
   const allSales = salesList.filter((s) => s.delivered);
@@ -105,6 +105,12 @@ export default async function Inicio() {
           <Link className="btn-soft" href="/finanzas#gasto">+ Gasto</Link>
         </div>
       </section>
+
+      {passkeys === 0 && (
+        <Link href="/cuenta" className="tip">
+          <strong>Entra sin contraseña.</strong> Activa Face ID en tu iPhone →
+        </Link>
+      )}
 
       <div className="stack">
         <p className="section-label">Ventas</p>
