@@ -246,6 +246,27 @@ dl.facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin
 dl.facts dt { color: var(--ink-2); }
 dl.facts dd { margin: 0; text-align: right; }
 
+/* Inicio */
+.hero-meters { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.hero-meter {
+  display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px;
+  background: color-mix(in srgb, var(--hero-ink) 8%, transparent);
+}
+.hm-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-size: .78rem; color: color-mix(in srgb, var(--hero-ink) 70%, transparent); }
+.hm-head strong { color: var(--hero-ink); font-size: .95rem; }
+.hm-track { display: block; height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--hero-ink) 15%, transparent); overflow: hidden; }
+.hm-track > span { display: block; height: 100%; border-radius: 999px; background: var(--c-in); }
+.hm-track > span.done { background: var(--hero-accent); }
+.hm-sub { font-size: .75rem; color: color-mix(in srgb, var(--hero-ink) 65%, transparent); }
+.section-label { font-size: .75rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+.count-pill { min-width: 24px; padding: 2px 8px; border-radius: 999px; background: var(--warn-soft); color: var(--warn); font-size: .8rem; font-weight: 800; text-align: center; }
+.todo { display: flex; flex-direction: column; }
+.todo-group + .todo-group { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; }
+.todo-title { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-weight: 700; margin-bottom: 6px; }
+.todo ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.todo li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: .88rem; }
+.todo li > :first-child { min-width: 0; }
+
 /* Finanzas: periodo */
 .chips { display: flex; gap: 8px; overflow-x: auto; margin: 0 -16px; padding: 2px 16px; scrollbar-width: none; }
 .chips::-webkit-scrollbar { display: none; }
