@@ -25,6 +25,9 @@ export default async function Cuenta() {
         <p className="card-sub">
           Actívalo en el iPhone (o Mac) con el que entras. La llave se guarda en tu llavero de iCloud, así que también sirve en tus otros dispositivos Apple con el mismo Apple ID.
         </p>
+        <p className="hint">
+          Necesitas tener prendido el Llavero de iCloud: Ajustes → tu nombre → iCloud → Contraseñas y llavero.
+        </p>
         {keys.length > 0 ? (
           <ul className="list compact">
             {keys.map((k) => (
