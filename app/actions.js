@@ -79,6 +79,16 @@ export async function updateProduct(formData) {
   refresh();
 }
 
+// Desde Cotizar: guarda tu precio por pieza como precio de venta del producto.
+export async function setSalePrice(productId, price) {
+  await ensureSchema();
+  const id = int(productId);
+  const value = num(price);
+  if (!id || value < 0) return;
+  await q(`update products set sale_price = $2 where id = $1`, [id, value]);
+  refresh();
+}
+
 export async function adjustStock(formData) {
   await ensureSchema();
   const productId = int(formData.get('product_id'));

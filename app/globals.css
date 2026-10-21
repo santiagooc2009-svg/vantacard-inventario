@@ -108,7 +108,7 @@ a { color: inherit; text-decoration: none; }
 
 .nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-  display: grid; grid-template-columns: repeat(5, 1fr);
+  display: grid; grid-template-columns: repeat(6, 1fr);
   background: #0b0c0f;
   border-top: 1px solid var(--line);
   padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
@@ -375,6 +375,24 @@ dl.facts dd { margin: 0; text-align: right; }
 .kpi .delta.neg { color: var(--neg); }
 .card-sub { margin: -4px 0 14px; font-size: .82rem; color: var(--ink-2); }
 .fund-total { font-family: var(--font-display); font-size: 1.2rem; font-weight: 700; }
+
+/* Cotizar */
+.quote { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.quote > li { padding: 12px 0; display: flex; flex-direction: column; gap: 4px; }
+.quote > li + li { border-top: 1px solid var(--line); }
+.quote-main { display: grid; grid-template-columns: 4.2em 1fr auto; align-items: baseline; gap: 10px; }
+.quote-qty { font-family: var(--font-mono); font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
+.quote-price { font-family: var(--font-display); font-size: 1.35rem; font-weight: 700; font-variant-numeric: proportional-nums; }
+.quote-price small { font-family: var(--font-body); font-size: .75rem; font-weight: 500; color: var(--ink-2); }
+.quote-total { font-weight: 600; }
+.quote-meta { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: .8rem; padding-left: calc(4.2em + 10px); }
+.quote > li.low .quote-price { color: var(--neg); }
+.verdict { padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line-strong); display: flex; flex-direction: column; gap: 2px; }
+.verdict.ok { background: color-mix(in srgb, var(--pos) 10%, transparent); }
+.verdict.ok .title { color: var(--pos); }
+.verdict.no { background: color-mix(in srgb, var(--neg) 10%, transparent); }
+.verdict.no .title { color: var(--neg); }
+.product-links { display: flex; gap: 14px; margin-bottom: -6px; }
 
 /* Formularios */
 label { display: flex; flex-direction: column; gap: 5px; font-size: .8rem; font-weight: 600; color: var(--ink-2); min-width: 0; }

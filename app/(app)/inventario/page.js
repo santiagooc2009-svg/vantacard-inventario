@@ -210,6 +210,9 @@ function ProductCard({ p }) {
           <strong>{p.sold}</strong>
         </div>
       </div>
+      <div className="product-links">
+        <Link href={`/cotizaciones?producto=${p.id}`} className="link small">Cotizar</Link>
+      </div>
       <details>
         <summary className="link small">Editar</summary>
         <form action={updateProduct} className="stack top-gap">

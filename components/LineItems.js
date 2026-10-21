@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { fifoCost } from '@/lib/pricing';
 
 const fmt = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
 
@@ -15,20 +16,6 @@ function useFormReset(ref, onReset) {
 // ---------- Líneas de una venta ----------
 
 const emptySale = () => ({ key: Math.random(), product_id: '', qty: '1', price: '' });
-
-// Costo PEPS de `qty` piezas de un producto, después de las primeras `skip` que ya se usaron.
-// Las que no alcanzan en inventario llevan el costo estimado del siguiente pedido.
-function fifoCost(p, skip, qty) {
-  let cost = 0;
-  for (const l of p.lots) {
-    const take = Math.min(Math.max(l.units - skip, 0), qty);
-    skip = Math.max(skip - l.units, 0);
-    cost += take * l.cost;
-    qty -= take;
-    if (!qty) return cost;
-  }
-  return cost + qty * p.estimate;
-}
 
 export function SaleLines({ products }) {
   const ref = useRef(null);
