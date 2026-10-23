@@ -1,7 +1,8 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { buildQuote, fifoCost, MIN_MARGIN } from '@/lib/pricing';
 import { setSalePrice } from '@/app/actions';
+import BrandMark from '@/components/BrandMark';
 
 const fmt2 = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
 const fmt0 = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
@@ -17,6 +18,7 @@ export default function QuoteBuilder({ products, initialId }) {
   const [ask, setAsk] = useState({ qty: '', price: '' });
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [showClient, setShowClient] = useState(false);
 
   const p = products.find((x) => String(x.id) === id);
   const unit = parseFloat(price) || 0;
@@ -113,7 +115,8 @@ export default function QuoteBuilder({ products, initialId }) {
             ))}
           </ul>
           <div className="actions top-gap">
-            <button type="button" className="btn small" onClick={copy}>{copied ? '✓ Copiada' : 'Copiar cotización'}</button>
+            <button type="button" className="btn small" onClick={() => setShowClient(true)}>Enseñar al cliente</button>
+            <button type="button" className="btn-soft small" onClick={copy}>{copied ? '✓ Copiada' : 'Copiar cotización'}</button>
             <a className="btn-soft small" href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener">Mandar por WhatsApp</a>
           </div>
         </section>
@@ -144,6 +147,57 @@ export default function QuoteBuilder({ products, initialId }) {
           )}
         </section>
       )}
+
+      {showClient && quote && <ClientView name={p.name} rows={quote.rows} onClose={() => setShowClient(false)} />}
+    </div>
+  );
+}
+
+// Vista para enseñarle la cotización al cliente en tu teléfono: solo precios, sin costos,
+// márgenes, pisos ni inventario.
+function ClientView({ name, rows, onClose }) {
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
+  const base = rows[0].price;
+  const best = rows.at(-1);
+  const date = new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Mexico_City' }).format(new Date());
+  return (
+    <div className="client-view" role="dialog" aria-modal="true" aria-label={`Cotización de ${name}`}>
+      <button type="button" className="client-close" onClick={onClose}>Cerrar</button>
+      <div className="client-card">
+        <BrandMark big />
+        <div>
+          <p className="eyebrow">Cotización · {date}</p>
+          <h2 className="client-title">{name}</h2>
+        </div>
+        <ul className="client-tiers">
+          {rows.map((r) => {
+            const save = base > 0 ? 1 - r.price / base : 0;
+            return (
+              <li key={r.qty} className={r === best && save > 0 ? 'best' : ''}>
+                <div className="ct-left">
+                  <span className="ct-qty">{r.qty === 1 ? '1 pieza' : `${r.qty} piezas`}</span>
+                  {r.qty > 1 && <span className="ct-total">Total {money(r.total)}</span>}
+                </div>
+                <div className="ct-right">
+                  <span className="ct-price">{money(r.price)}<small> c/u</small></span>
+                  {save >= 0.005 && <span className="ct-save">{r === best ? 'Mejor precio · ' : ''}ahorras {pct(save)}</span>}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="client-foot">Precios en pesos mexicanos · vantacard.pro</p>
+      </div>
     </div>
   );
 }

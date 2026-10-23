@@ -394,6 +394,43 @@ dl.facts dd { margin: 0; text-align: right; }
 .verdict.no .title { color: var(--neg); }
 .product-links { display: flex; gap: 14px; margin-bottom: -6px; }
 
+/* Vista para el cliente */
+.client-view {
+  position: fixed; inset: 0; z-index: 100; overflow-y: auto;
+  display: flex; align-items: center; justify-content: center;
+  padding: calc(56px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom));
+  background:
+    radial-gradient(70vmax 70vmax at -10% -20%, rgba(var(--accent-rgb), .09), transparent 60%),
+    radial-gradient(60vmax 60vmax at 115% 40%, rgba(var(--accent-rgb), .06), transparent 60%),
+    var(--bg);
+}
+.client-close {
+  position: fixed; top: calc(12px + env(safe-area-inset-top)); right: 14px; z-index: 101;
+  font: inherit; font-size: .85rem; color: var(--ink-2); background: rgba(255, 255, 255, .04);
+  border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px; cursor: pointer;
+}
+.client-card {
+  width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 20px; padding: 26px 22px;
+  background: var(--hero); border: 1px solid var(--line-strong); border-radius: 28px;
+  box-shadow: 0 40px 70px -30px rgba(4, 5, 7, .85), inset 0 1px 0 rgba(255, 255, 255, .05);
+}
+.client-title { font-size: 1.6rem; font-weight: 700; letter-spacing: -.02em; line-height: 1.15; margin-top: 6px; }
+.client-tiers { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.client-tiers li {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: 16px; border: 1px solid var(--line); background: rgba(255, 255, 255, .02);
+}
+.client-tiers li.best { border-color: var(--accent); background: rgba(var(--accent-rgb), .08); }
+.ct-left, .ct-right { display: flex; flex-direction: column; gap: 2px; }
+.ct-right { align-items: flex-end; text-align: right; }
+.ct-qty { font-weight: 600; }
+.ct-total { font-size: .8rem; color: var(--ink-2); }
+.ct-price { font-family: var(--font-display); font-size: 1.5rem; font-weight: 700; line-height: 1.1; font-variant-numeric: proportional-nums; }
+.ct-price small { font-family: var(--font-body); font-size: .75rem; font-weight: 500; color: var(--ink-2); }
+.ct-save { font-family: var(--font-mono); font-size: .68rem; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.client-tiers li.best .ct-save { color: var(--accent-strong); }
+.client-foot { font-family: var(--font-mono); font-size: .66rem; letter-spacing: .1em; text-transform: uppercase; color: var(--accent-dim); text-align: center; }
+
 /* Formularios */
 label { display: flex; flex-direction: column; gap: 5px; font-size: .8rem; font-weight: 600; color: var(--ink-2); min-width: 0; }
 label[hidden] { display: none; }
